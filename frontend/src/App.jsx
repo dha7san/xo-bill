@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import useCartStore from './store/cartStore';
-import { ShoppingCart, LayoutGrid, Search, Receipt, Trash2 } from 'lucide-react';
+import { ShoppingCart, LayoutGrid, Search, Receipt, Trash2, WifiOff } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 
 const DUMMY_MENU = [
   { id: 1, name: 'Margherita Pizza', price: 299, category: 'Pizza' },
@@ -14,8 +15,51 @@ const DUMMY_MENU = [
 ];
 
 function App() {
-  const { cart, addToCart, removeFromCart, clearCart, tableNumber, setTableNumber } = useCartStore();
+  const { cart, addToCart, removeFromCart, clearCart, tableNumber, setTableNumber, offlineOrders, addOfflineOrder, removeOfflineOrder } = useCartStore();
   const [activeCategory, setActiveCategory] = useState('All');
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineOrders();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Initial check just in case
+    if (navigator.onLine && offlineOrders.length > 0) {
+      syncOfflineOrders();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [offlineOrders]);
+
+  const syncOfflineOrders = async () => {
+    if (offlineOrders.length === 0) return;
+    
+    console.log(`Syncing ${offlineOrders.length} offline orders...`);
+    
+    for (const order of offlineOrders) {
+      try {
+        // Mock API Call to actual backend endpoint
+        // e.g. await axios.post('http://localhost:5000/api/billing', order)
+        console.log('Successfully synced order:', order.orderNumber);
+        removeOfflineOrder(order.orderNumber);
+      } catch (err) {
+        console.error('Failed to sync order:', order.orderNumber);
+      }
+    }
+    
+    if (offlineOrders.length > 0) {
+      alert(`Successfully synced pending orders!`);
+    }
+  };
 
   const categories = ['All', ...new Set(DUMMY_MENU.map(i => i.category))];
   
@@ -32,15 +76,24 @@ function App() {
     
     // Simulate API call to standard backend format
     const payload = {
+      orderNumber: uuidv4(), // Generate UUID here
       tableNumber,
-      items: cart.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
-      totalAmount: grandTotal
+      items: cart.map(i => ({ name: i.name, qty: i.qty, price: i.price, menuItemId: i.id })),
+      totalAmount: grandTotal,
+      orderType: 'Dine-In',
+      timestamp: new Date().toISOString()
     };
 
-    console.log('Sending to backend:', payload);
+    if (!isOnline) {
+      addOfflineOrder(payload);
+      alert(`You are offline. Order for Table ${tableNumber} has been saved locally and will sync when internet returns!`);
+    } else {
+      console.log('Sending to backend live:', payload);
+      // e.g. await axios.post('http://localhost:5000/api/billing', payload)
+      // If error occurs, we could catch and addOfflineOrder(payload)
+      alert(`Live order placed for Table ${tableNumber}!\nAmount: ₹${grandTotal.toFixed(2)}`);
+    }
     
-    // Minimal demonstration of what would happen
-    alert(`Order placed for Table ${tableNumber}!\nAmount: ₹${grandTotal.toFixed(2)}`);
     clearCart();
   };
 
@@ -89,6 +142,12 @@ function App() {
             Current Order
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {!isOnline && (
+              <span className="badge" title={`${offlineOrders.length} pending orders`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <WifiOff size={12} />
+                Offline ({offlineOrders.length})
+              </span>
+            )}
             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Table</span>
             <input 
               type="number" 

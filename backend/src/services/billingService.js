@@ -30,7 +30,7 @@ const createOrder = async (data) => {
   const grandTotal = subTotal + taxTotal;
 
   // 3. Create Order
-  const orderNumber = `ORD-${Date.now()}`;
+  const orderNumber = data.orderNumber || require('uuid').v4();
   const order = new Order({
     orderNumber,
     tableNumber,
