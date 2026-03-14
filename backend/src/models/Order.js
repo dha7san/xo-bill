@@ -1,38 +1,29 @@
 const mongoose = require('mongoose');
 
-const orderSchema = new mongoose.Schema(
-  {
-    tableNumber: {
-      type: Number,
-      required: true,
-    },
-    items: [
-      {
-        name: { type: String, required: true },
-        qty: { type: Number, required: true },
-        price: { type: Number, required: true },
-      },
-    ],
-    status: {
-      type: String,
-      enum: ['Pending', 'Cooking', 'Served', 'Paid'],
-      default: 'Pending',
-    },
-    gstRate: {
-      type: Number,
-      default: 5, // typical restaurant GST
-    },
-    totalAmount: {
-      type: Number,
-      required: true,
-    },
-    paymentMethod: {
-      type: String,
-      enum: ['Cash', 'Card', 'UPI', 'Unpaid'],
-      default: 'Unpaid',
-    },
+// Mongoose Schema
+const orderSchema = new mongoose.Schema({
+  orderNumber: { type: String, unique: true }, // e.g., ORD-260314-001
+  tableNumber: { type: Number },
+  orderType: { 
+    type: String, 
+    enum: ['Dine-In', 'Takeaway', 'Delivery'], 
+    default: 'Dine-In' 
   },
-  { timestamps: true }
-);
+  waiterId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  status: { 
+    type: String, 
+    enum: ['Pending', 'Cooking', 'Served', 'Billed', 'Completed', 'Cancelled'],
+    default: 'Pending'
+  },
+  subTotal: { type: Number, default: 0 },
+  taxTotal: { type: Number, default: 0 },
+  discountTotal: { type: Number, default: 0 },
+  grandTotal: { type: Number, default: 0 },
+  paymentStatus: { 
+    type: String, 
+    enum: ['Unpaid', 'Partial', 'Paid', 'Refunded'], 
+    default: 'Unpaid' 
+  }
+}, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);
