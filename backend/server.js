@@ -5,7 +5,12 @@ const morgan = require('morgan');
 const connectDB = require('./src/config/db');
 
 // Import routes
-const orderRoutes = require('./src/routes/orderRoutes');
+const authRoutes = require('./src/routes/authRoutes');
+const menuRoutes = require('./src/routes/menuRoutes');
+const billingRoutes = require('./src/routes/billingRoutes');
+const paymentRoutes = require('./src/routes/paymentRoutes');
+const inventoryRoutes = require('./src/routes/inventoryRoutes');
+const reportRoutes = require('./src/routes/reportRoutes');
 
 const app = express();
 
@@ -18,7 +23,12 @@ app.use(cors());
 app.use(morgan('dev'));
 
 // Routes
-app.use('/api/orders', orderRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/menu', menuRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
