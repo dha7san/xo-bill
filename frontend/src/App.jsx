@@ -5,12 +5,16 @@ import ReportModal from './ReportModal';
 import InventoryModal from './InventoryModal';
 import { AppLockScreen, ManagerPinModal, useAppSecurity } from './PinGate';
 import { CONFIG } from './config';
+import { localDB } from './services/db';
+import { syncManager } from './services/syncManager';
+import { socketService } from './services/socketService';
 import {
   ShoppingCart, Receipt, Trash2, WifiOff, Coffee,
   Banknote, CreditCard, Wallet, Printer, QrCode,
-  X, CheckCircle2, Smartphone, BarChart2, Package, Lock
+  X, CheckCircle2, Smartphone, BarChart2, Package, Lock, RefreshCw, Activity
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 
 // ─── Config (from environment variables via config.js) ────────────────────
 const UPI_ID    = CONFIG.upiId;
@@ -266,12 +270,14 @@ export default function App() {
 
   const [activeCategory, setActiveCategory]   = useState('All');
   const [isOnline, setIsOnline]               = useState(navigator.onLine);
+  const [isWsConnected, setIsWsConnected]     = useState(false);
+  const [isSyncing, setIsSyncing]             = useState(false);
   const [paymentMethod, setPaymentMethod]     = useState('Cash');
   const [showUpiModal, setShowUpiModal]       = useState(false);
   const [showCardModal, setShowCardModal]     = useState(false);
   const [showReport, setShowReport]           = useState(false);
   const [showInventory, setShowInventory]     = useState(false);
-  const [toast, setToast]                     = useState(null);   // string | null
+  const [toast, setToast]                     = useState(null);
 
   const {
     cashierUnlocked, showManagerModal,
@@ -279,25 +285,40 @@ export default function App() {
     requireManager, onManagerUnlock, onManagerCancel,
   } = useAppSecurity();
 
-  const { ingredients, deductIngredients } = useInventoryStore();
+  const { ingredients, deductIngredients, syncStock } = useInventoryStore();
   const lowStockCount = ingredients.filter(i => i.stock <= i.minStock).length;
 
-  // ── Online / offline listener ──
+  // ── Online / Socket / Sync Initialization ──
   useEffect(() => {
-    const up   = () => { setIsOnline(true);  syncOfflineOrders(); };
+    // 1. Sync Manager Initialization
+    syncManager.startAutoSync(20000); // Check every 20s
+    
+    // 2. WebSocket Initialization
+    socketService.connect(CONFIG.storeId || 'default');
+    
+    const stopInvSync = socketService.on('inventory.updated', (payload) => {
+      // payload: { ingredientId, newStock }
+      if (syncStock) syncStock(payload.ingredientId, payload.newStock);
+    });
+
+    const stopOrderSync = socketService.on('order.created', (payload) => {
+      // Notify current terminal if another terminal placed an order (optional)
+      console.log('📡 Order received from other terminal:', payload.orderNumber);
+    });
+
+    // 3. Online/Offline Detect
+    const up   = () => setIsOnline(true);
     const down = () => setIsOnline(false);
     window.addEventListener('online',  up);
     window.addEventListener('offline', down);
-    if (navigator.onLine && offlineOrders.length > 0) syncOfflineOrders();
-    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
-  }, [offlineOrders]);
 
-  const syncOfflineOrders = async () => {
-    for (const order of offlineOrders) {
-      try { removeOfflineOrder(order.orderNumber); }
-      catch { /* will retry next time */ }
-    }
-  };
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+      stopInvSync();
+      stopOrderSync();
+    };
+  }, [syncStock, recordOrder]);
 
   const subTotal   = cart.reduce((s, i) => s + i.price * i.qty, 0);
   const gst        = subTotal * CONFIG.gstRate;
@@ -306,37 +327,41 @@ export default function App() {
   const categories   = ['All', ...new Set(DUMMY_MENU.map(i => i.category))];
   const filteredMenu = activeCategory === 'All' ? DUMMY_MENU : DUMMY_MENU.filter(i => i.category === activeCategory);
 
-  // ── Finalise order (called after payment confirmed) ──
+  // ── Finalise order (Production-Grade Sync Logic) ──
   const finaliseOrder = useCallback(async (withPrint = false) => {
+    const orderId = uuidv4();
     const payload = {
-      orderNumber: uuidv4(),
+      orderNumber: orderId,
       tableNumber,
       items: cart.map(i => ({ name: i.name, qty: i.qty, price: i.price, menuItemId: i.id })),
       totalAmount: grandTotal,
       orderType: 'Dine-In',
       paymentMethod,
       timestamp: new Date().toISOString(),
+      storeId: CONFIG.storeId || 'default',
+      terminalId: 'terminal-1' // In real app, get from config
     };
 
-    if (!isOnline) {
-      addOfflineOrder(payload);
-    } else {
-      console.log('Order placed:', payload);
-    }
-
-    // Always record to local sales history for reports
+    // 1. Persist to local sales history (Zustand - for Reports UI immediate feedback)
     recordOrder(payload);
 
-    // Deduct ingredients for each ordered item
+    // 2. Persist to IndexedDB sync queue (Reliable persistence)
+    await localDB.savePendingOrder({ id: orderId, payload });
+
+    // 3. Deduct ingredients locally (Optimistic update)
     deductIngredients(payload.items);
 
+    // 4. Print receipt locally
     if (withPrint) {
       await printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paymentMethod });
     }
 
+    // 5. Trigger immediate background sync
+    syncManager.sync();
+
     clearCart();
     setToast(`${paymentMethod} payment of ₹${grandTotal.toFixed(2)} collected!`);
-  }, [cart, grandTotal, gst, isOnline, paymentMethod, subTotal, tableNumber]);
+  }, [cart, grandTotal, gst, paymentMethod, subTotal, tableNumber, recordOrder, deductIngredients, clearCart]);
 
   // ── Main charge button handler ──
   const handleCharge = async (withPrint = false) => {
@@ -410,12 +435,19 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-5">
-            {!isOnline && (
-              <div className="flex items-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 px-3 py-1.5 rounded-full text-sm font-semibold">
-                <WifiOff size={14} />
-                <span>Offline ({offlineOrders.length})</span>
-              </div>
-            )}
+            {/* Status Indicators */}
+            <div className="flex items-center gap-3 px-3 py-1.5 bg-neutral-900 border border-neutral-800 rounded-full">
+               <div className="flex items-center gap-1.5" title={isOnline ? 'Internet Connected' : 'Internet Offline'}>
+                  <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                  <span className="text-[10px] uppercase font-bold text-neutral-500">Net</span>
+               </div>
+               <div className="w-px h-3 bg-neutral-800" />
+               <div className="flex items-center gap-1.5" title="Real-time Multi-device Sync">
+                  <Activity size={12} className={isOnline ? 'text-sky-400' : 'text-neutral-600'} />
+                  <span className="text-[10px] uppercase font-bold text-neutral-500">Live</span>
+               </div>
+            </div>
+
             {/* Inventory button */}
             <button
               onClick={() => requireManager(() => setShowInventory(true))}

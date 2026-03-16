@@ -142,6 +142,15 @@ const useInventoryStore = create(
         }));
       },
 
+      // Real-time sync: update local stock from remote event
+      syncStock: (id, newStock) => {
+        set((state) => ({
+          ingredients: state.ingredients.map(i =>
+            i.id === id ? { ...i, stock: newStock } : i
+          ),
+        }));
+      },
+
       // Reset all stocks to defaults
       resetInventory: () => set({ ingredients: DEFAULT_INGREDIENTS }),
     }),
