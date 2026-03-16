@@ -1,18 +1,30 @@
 const mongoose = require('mongoose');
 
-const settingsSchema = new mongoose.Schema({
+const settingSchema = new mongoose.Schema({
+  // Singleton pattern, usually only one document exists.
   restaurantName: { type: String, required: true },
   address: { type: String },
   phone: { type: String },
   email: { type: String },
-  gstin: { type: String }, // Tax Registration Number
-  taxConfiguration: [{
-    taxName: { type: String }, // e.g., 'SGST', 'CGST'
-    percentage: { type: Number },
-    isActive: { type: Boolean, default: true }
-  }],
-  currencySymbol: { type: String, default: '₹' },
-  receiptFooterText: { type: String }
-}, { timestamps: true });
+  website: { type: String },
+  logoUrl: { type: String },
+  
+  // Tax & Currency configs
+  currencySymbol: { type: String, default: '$' },
+  currencyCode: { type: String, default: 'USD' },
+  defaultTaxRatePercent: { type: Number, default: 0 },
+  taxName: { type: String, default: 'Tax' }, // e.g., VAT, GST, Sales Tax
+  includeTaxInMenuPrice: { type: Boolean, default: false },
 
-module.exports = mongoose.model('Setting', settingsSchema);
+  // Receipt details
+  receiptHeader: { type: String },
+  receiptFooter: { type: String },
+  
+  // Operational Details
+  operatingHours: { type: mongoose.Schema.Types.Mixed }, // flexible JSON object for schedules
+  isCurrentlyOpen: { type: Boolean, default: true }
+}, {
+  timestamps: true
+});
+
+module.exports = mongoose.model('Setting', settingSchema);

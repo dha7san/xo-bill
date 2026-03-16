@@ -1,27 +1,35 @@
 const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema({
-  orderId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Order', 
-    required: true 
-  },
-  cashierId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User' 
-  },
-  amount: { type: Number, required: true },
+  orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true, index: true },
+  
+  amount: { type: Number, required: true, min: 0 },
+  
   paymentMethod: { 
     type: String, 
-    enum: ['Cash', 'Card', 'UPI', 'Wallet'], 
+    enum: ['Cash', 'Credit Card', 'Debit Card', 'UPI', 'Digital Wallet', 'Loyalty Points', 'Other'], 
     required: true 
   },
-  transactionId: { type: String }, // External reference from PG (e.g., Razorpay/UPI ref)
+  
   status: { 
     type: String, 
-    enum: ['Success', 'Failed', 'Refunded'], 
-    default: 'Success' 
-  }
-}, { timestamps: true });
+    enum: ['Pending', 'Completed', 'Failed', 'Refunded'], 
+    default: 'Completed' 
+  },
+  
+  transactionReference: { type: String }, // External ID from payment gateway
+  
+  collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  
+  tipsAmount: { type: Number, default: 0 },
+  
+  notes: { type: String }
+}, {
+  timestamps: true
+});
+
+paymentSchema.index({ orderId: 1, status: 1 });
+paymentSchema.index({ createdAt: -1, status: 1 }); // End of day reconciliation
+paymentSchema.index({ paymentMethod: 1 });
 
 module.exports = mongoose.model('Payment', paymentSchema);

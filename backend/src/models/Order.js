@@ -1,29 +1,58 @@
 const mongoose = require('mongoose');
 
-// Mongoose Schema
 const orderSchema = new mongoose.Schema({
-  orderNumber: { type: String, unique: true }, // e.g., ORD-260314-001
-  tableNumber: { type: Number },
+  orderNumber: { type: String, required: true, unique: true }, // E.g. ORD-20231015-001
+  
   orderType: { 
     type: String, 
     enum: ['Dine-In', 'Takeaway', 'Delivery'], 
     default: 'Dine-In' 
   },
+  
+  // For Dine-In
+  tableNumber: { type: String },
+  guestCount: { type: Number, default: 1 },
+
+  // For Delivery / CRM
+  customer: {
+    name: { type: String },
+    phone: { type: String },
+    address: { type: String }
+  },
+
+  // Staff assigned
   waiterId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  cashierId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+
+  // Workflow Status
   status: { 
     type: String, 
-    enum: ['Pending', 'Cooking', 'Served', 'Billed', 'Completed', 'Cancelled'],
-    default: 'Pending'
+    enum: ['Open', 'Sent to Kitchen', 'Partial Served', 'Served', 'Billed', 'Completed', 'Cancelled'],
+    default: 'Open'
   },
-  subTotal: { type: Number, default: 0 },
-  taxTotal: { type: Number, default: 0 },
+
+  // Financials
+  subTotal: { type: Number, default: 0, required: true },
+  taxTotal: { type: Number, default: 0, required: true },
   discountTotal: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
+  grandTotal: { type: Number, default: 0, required: true },
+  
+  discountReason: { type: String }, // e.g., 'Coupon', 'Manager Comp'
+  
   paymentStatus: { 
     type: String, 
     enum: ['Unpaid', 'Partial', 'Paid', 'Refunded'], 
     default: 'Unpaid' 
-  }
-}, { timestamps: true });
+  },
+  
+  notes: { type: String }
+}, { 
+  timestamps: true 
+});
+
+// Calculate totals efficiently via indexing
+orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1 });
+orderSchema.index({ waiterId: 1, status: 1 });
 
 module.exports = mongoose.model('Order', orderSchema);
