@@ -2,7 +2,7 @@
 // Publishes named events to Redis channels.
 // Consumers (WebSocket handler, workers) subscribe to those channels.
 
-const { getRedis } = require('./db/redis');
+const { getRedis, getSubscriber } = require('../db/redis');
 
 const CHANNELS = {
   ORDER_CREATED:     'order.created',
@@ -18,4 +18,4 @@ async function publish(channel, payload) {
   await redis.publish(channel, JSON.stringify({ channel, payload, ts: Date.now() }));
 }
 
-module.exports = { publish, CHANNELS };
+module.exports = { publish, CHANNELS, getSubscriber };

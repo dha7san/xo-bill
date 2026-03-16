@@ -12,6 +12,15 @@ async function getRedis() {
       lazyConnect: true,
       retryStrategy: (times) => (times > 3 ? null : Math.min(times * 200, 2000)),
     });
+
+    // Handle error events to prevent process crash
+    client.on('error', (err) => {
+      // Quietly log or ignore connection errors if we want graceful fallback
+      if (err.code !== 'ECONNREFUSED') {
+        console.error('Redis error:', err);
+      }
+    });
+
     await client.connect().catch(() => null);
     if (client.status === 'ready') {
       redis = client;
@@ -30,6 +39,11 @@ async function getSubscriber() {
   const pub = await getRedis();
   if (!pub) return null;
   subscriber = pub.duplicate();
+  subscriber.on('error', (err) => {
+    if (err.code !== 'ECONNREFUSED') {
+      console.error('Redis subscriber error:', err);
+    }
+  });
   return subscriber;
 }
 

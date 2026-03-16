@@ -8,10 +8,14 @@ import { CONFIG } from './config';
 import { localDB } from './services/db';
 import { syncManager } from './services/syncManager';
 import { socketService } from './services/socketService';
+import useMenuStore from './store/menuStore';
+import AdminPanel from './AdminPanel';
+import useAuthStore from './store/authStore';
+import AuthScreen from './AuthScreen';
 import {
   ShoppingCart, Receipt, Trash2, WifiOff, Coffee,
   Banknote, CreditCard, Wallet, Printer, QrCode,
-  X, CheckCircle2, Smartphone, BarChart2, Package, Lock, RefreshCw, Activity
+  X, CheckCircle2, Smartphone, BarChart2, Package, Lock, RefreshCw, Activity, Settings, LogOut
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
@@ -20,20 +24,7 @@ import axios from 'axios';
 const UPI_ID    = CONFIG.upiId;
 const STORE_NAME = CONFIG.storeName;
 
-const DUMMY_MENU = [
-  { id: 1,  name: 'Margherita Pizza',  price: 299, category: 'Pizza'     },
-  { id: 2,  name: 'Pepperoni Pizza',   price: 349, category: 'Pizza'     },
-  { id: 3,  name: 'Garlic Bread',      price: 149, category: 'Sides'     },
-  { id: 4,  name: 'Truffle Fries',     price: 199, category: 'Sides'     },
-  { id: 5,  name: 'Coke',             price: 60,  category: 'Beverages' },
-  { id: 6,  name: 'Lemonade',         price: 90,  category: 'Beverages' },
-  { id: 7,  name: 'Pasta Alfredo',    price: 250, category: 'Pasta'     },
-  { id: 8,  name: 'Arrabbiata',       price: 230, category: 'Pasta'     },
-  { id: 9,  name: 'Classic Burger',   price: 180, category: 'Burgers'   },
-  { id: 10, name: 'Cheese Burger',    price: 220, category: 'Burgers'   },
-  { id: 11, name: 'Vanilla Shake',    price: 150, category: 'Beverages' },
-  { id: 12, name: 'Chocolate Brownie',price: 180, category: 'Dessert'   },
-];
+// DUMMY_MENU removed in favor of useMenuStore dynamic data
 
 // ─── Payment Method Config ──────────────────────────────────────────────────
 const PAYMENT_METHODS = [
@@ -277,7 +268,10 @@ export default function App() {
   const [showCardModal, setShowCardModal]     = useState(false);
   const [showReport, setShowReport]           = useState(false);
   const [showInventory, setShowInventory]     = useState(false);
+  const [showAdmin, setShowAdmin]             = useState(false);
   const [toast, setToast]                     = useState(null);
+
+  const { user, isAuthenticated, isLoading: isAuthLoading, init: initAuth, logout } = useAuthStore();
 
   const {
     cashierUnlocked, showManagerModal,
@@ -285,11 +279,15 @@ export default function App() {
     requireManager, onManagerUnlock, onManagerCancel,
   } = useAppSecurity();
 
+  const { categories: apiCategories, menuItems: apiItems, fetchMenu, isLoading: isMenuLoading } = useMenuStore();
   const { ingredients, deductIngredients, syncStock } = useInventoryStore();
   const lowStockCount = ingredients.filter(i => i.stock <= i.minStock).length;
 
   // ── Online / Socket / Sync Initialization ──
   useEffect(() => {
+    // 0. Init Auth
+    initAuth();
+
     // 1. Sync Manager Initialization
     syncManager.startAutoSync(20000); // Check every 20s
     
@@ -312,20 +310,25 @@ export default function App() {
     window.addEventListener('online',  up);
     window.addEventListener('offline', down);
 
+    // 4. Fetch Menu from Backend
+    fetchMenu();
+
     return () => {
       window.removeEventListener('online', up);
       window.removeEventListener('offline', down);
       stopInvSync();
       stopOrderSync();
     };
-  }, [syncStock, recordOrder]);
+  }, [syncStock, recordOrder, fetchMenu]);
 
-  const subTotal   = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const subTotal   = cart.reduce((s, i) => s + (i.price || i.basePrice) * i.qty, 0);
   const gst        = subTotal * CONFIG.gstRate;
   const grandTotal = subTotal + gst;
 
-  const categories   = ['All', ...new Set(DUMMY_MENU.map(i => i.category))];
-  const filteredMenu = activeCategory === 'All' ? DUMMY_MENU : DUMMY_MENU.filter(i => i.category === activeCategory);
+  const categories   = ['All', ...apiCategories.map(c => c.name)];
+  const filteredMenu = activeCategory === 'All' 
+    ? apiItems 
+    : apiItems.filter(i => (i.category?.name || i.category) === activeCategory);
 
   // ── Finalise order (Production-Grade Sync Logic) ──
   const finaliseOrder = useCallback(async (withPrint = false) => {
@@ -333,7 +336,7 @@ export default function App() {
     const payload = {
       orderNumber: orderId,
       tableNumber,
-      items: cart.map(i => ({ name: i.name, qty: i.qty, price: i.price, menuItemId: i.id })),
+      items: cart.map(i => ({ name: i.name, qty: i.qty, price: i.price || i.basePrice, menuItemId: i._id || i.id })),
       totalAmount: grandTotal,
       orderType: 'Dine-In',
       paymentMethod,
@@ -374,6 +377,18 @@ export default function App() {
     await finaliseOrder(withPrint);
   };
 
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthScreen />;
+  }
+
   return (
     <>
       {/* ── App lock screen — shown until cashier PIN entered ── */}
@@ -397,6 +412,9 @@ export default function App() {
           onClose={() => setShowReport(false)}
         />
       )}
+
+      {/* ── Admin Panel Modal ── */}
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
 
       {/* ── UPI Modal ── */}
       {showUpiModal && (
@@ -469,6 +487,14 @@ export default function App() {
               <BarChart2 size={16} />
               Reports
             </button>
+            {/* Admin button */}
+            <button
+               onClick={() => requireManager(() => setShowAdmin(true))}
+               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-emerald-400 hover:border-emerald-500/40 transition-all text-sm font-semibold"
+            >
+               <Settings size={16} />
+               Admin
+            </button>
             {/* Lock button */}
             <button
               onClick={lockCashier}
@@ -477,6 +503,15 @@ export default function App() {
             >
               <Lock size={16} />
               Lock
+            </button>
+            {/* Logout button */}
+            <button
+               onClick={logout}
+               title="Sign Out"
+               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:border-red-500/40 transition-all text-sm font-semibold"
+            >
+               <LogOut size={16} />
+               Sign Out
             </button>
             <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 px-4 py-2 rounded-xl">
               <span className="text-sm font-medium text-neutral-400">Table</span>
@@ -519,8 +554,8 @@ export default function App() {
               <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredMenu.map(item => (
                   <div
-                    key={item.id}
-                    onClick={() => addToCart(item)}
+                    key={item._id || item.id}
+                    onClick={() => addToCart({ ...item, price: item.basePrice || item.price })}
                     className="group relative flex flex-col justify-between h-36 bg-neutral-900 border border-neutral-800 p-4 rounded-2xl cursor-pointer hover:border-sky-500/50 transition-all duration-200 hover:shadow-[0_6px_24px_rgba(56,189,248,0.08)] hover:-translate-y-0.5 overflow-hidden"
                   >
                     <div className="absolute top-0 right-0 w-28 h-28 bg-sky-500/5 rounded-full blur-2xl -mr-8 -mt-8 group-hover:bg-sky-500/10 transition-all duration-500" />
@@ -528,7 +563,7 @@ export default function App() {
                       {item.name}
                     </div>
                     <div className="flex justify-between items-end z-10">
-                      <span className="text-sky-400 font-bold text-lg">₹{item.price}</span>
+                      <span className="text-sky-400 font-bold text-lg">₹{item.basePrice || item.price}</span>
                       <span className="w-7 h-7 rounded-full bg-neutral-800 flex items-center justify-center group-hover:bg-sky-500 text-neutral-400 group-hover:text-white transition-colors text-base font-bold">+</span>
                     </div>
                   </div>
@@ -561,13 +596,13 @@ export default function App() {
                   <p className="text-sm font-medium">Select items from the menu</p>
                 </div>
               ) : cart.map(item => (
-                <div key={item.id} className="flex items-center justify-between bg-neutral-900 px-4 py-3 rounded-xl border border-neutral-800">
+                <div key={item._id || item.id} className="flex items-center justify-between bg-neutral-900 px-4 py-3 rounded-xl border border-neutral-800">
                   <div className="flex flex-col min-w-0 flex-1 mr-3">
                     <span className="font-medium text-sm text-white truncate">{item.name}</span>
-                    <span className="text-sky-400 text-xs font-semibold mt-0.5">₹{(item.price * item.qty).toFixed(0)}</span>
+                    <span className="text-sky-400 text-xs font-semibold mt-0.5">₹{((item.price || item.basePrice) * item.qty).toFixed(0)}</span>
                   </div>
                   <div className="flex items-center gap-2 bg-neutral-950 rounded-full px-1 py-1 border border-neutral-800 shrink-0">
-                    <button onClick={() => removeFromCart(item.id)} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors">
+                    <button onClick={() => removeFromCart(item._id || item.id)} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors">
                       <span className="leading-none mb-px text-base">−</span>
                     </button>
                     <span className="text-sm font-bold text-white w-3 text-center">{item.qty}</span>

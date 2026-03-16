@@ -2,23 +2,34 @@ const authService = require('../services/authService');
 
 const login = async (req, res) => {
   try {
-    const { pin } = req.body;
-    if (!pin) return res.status(400).json({ message: 'PIN is required' });
+    const { email, password, pin } = req.body;
+    let result;
 
-    const result = await authService.login(pin);
-    res.status(200).json(result);
+    if (email && password) {
+      result = await authService.loginWithEmail(email, password);
+    } else if (pin) {
+      result = await authService.loginWithPin(pin);
+    } else {
+      return res.status(400).json({ status: 'error', message: 'Provide Email/Password or PIN' });
+    }
+
+    res.json({ status: 'success', data: result });
   } catch (error) {
-    res.status(401).json({ message: error.message });
+    res.status(401).json({ status: 'error', message: error.message });
   }
 };
 
 const register = async (req, res) => {
   try {
-    const user = await authService.register(req.body);
-    res.status(201).json({ message: 'User created successfully', user: { id: user._id, name: user.name } });
+    const result = await authService.register(req.body);
+    res.status(201).json({ status: 'success', data: result });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(400).json({ status: 'error', message: error.message });
   }
 };
 
-module.exports = { login, register };
+const getMe = async (req, res) => {
+  res.json({ status: 'success', data: req.user });
+};
+
+module.exports = { login, register, getMe };
