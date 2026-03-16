@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import useCartStore from './store/cartStore';
-import { ShoppingCart, LayoutGrid, Search, Receipt, Trash2, WifiOff, Coffee, Banknote, CreditCard, Wallet, AlertCircle } from 'lucide-react';
+import { ShoppingCart, LayoutGrid, Search, Receipt, Trash2, WifiOff, Coffee, Banknote, CreditCard, Wallet, AlertCircle, Printer } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 const DUMMY_MENU = [
@@ -68,9 +68,63 @@ export default function App() {
   const gst = subTotal * 0.05; // 5% GST
   const grandTotal = subTotal + gst;
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (withPrint = false) => {
     if (cart.length === 0) return alert('Cart is empty!');
     
+    // ESC/POS Thermal Printer Logic via Web Serial API
+    if (withPrint) {
+      if (!navigator.serial) {
+        alert('Web Serial API not supported in this browser. Please use Chrome/Edge.');
+      } else {
+        try {
+          let port;
+          const ports = await navigator.serial.getPorts();
+          if (ports.length > 0) {
+            port = ports[0];
+          } else {
+            port = await navigator.serial.requestPort();
+          }
+          await port.open({ baudRate: 9600 });
+          
+          const writer = port.writable.getWriter();
+          const encoder = new TextEncoder();
+    
+          const ESC = "\x1b", GS = "\x1d";
+          const INIT = ESC + "@";
+          const ALIGN_CENTER = ESC + "a" + "\x01";
+          const ALIGN_LEFT = ESC + "a" + "\x00";
+          const BOLD_ON = ESC + "E" + "\x01";
+          const BOLD_OFF = ESC + "E" + "\x00";
+          const CUT = GS + "V" + "\x41" + "\x03"; 
+    
+          let receipt = INIT;
+          receipt += ALIGN_CENTER + BOLD_ON + "XOPOS BILLING\n" + BOLD_OFF;
+          receipt += "--------------------------------\n";
+          receipt += ALIGN_LEFT;
+    
+          cart.forEach(item => {
+            const name = item.name.substring(0, 18).padEnd(18);
+            const qty = String(item.qty).padStart(3);
+            const price = String(item.price * item.qty).padStart(8);
+            receipt += `${name} ${qty} ${price}\n`;
+          });
+    
+          receipt += "--------------------------------\n";
+          receipt += `Subtotal:                ${subTotal.toFixed(2).padStart(8)}\n`;
+          receipt += `GST (5%):                 ${gst.toFixed(2).padStart(8)}\n`;
+          receipt += ALIGN_CENTER + BOLD_ON + `TOTAL: Rs.${grandTotal.toFixed(2)}\n` + BOLD_OFF;
+          receipt += "\n\n\n\n\n"; // Feed lines before cutting
+          receipt += CUT;
+    
+          await writer.write(encoder.encode(receipt));
+          writer.releaseLock();
+          await port.close();
+        } catch (err) {
+          console.error('Print failed:', err);
+        }
+      }
+    }
+
     const payload = {
       orderNumber: uuidv4(),
       tableNumber,
@@ -263,9 +317,25 @@ export default function App() {
             <span>Card</span>
           </button>
           
+          {/* Print & Charge Button */}
+          <button 
+            onClick={() => handleCheckout(true)}
+            disabled={cart.length === 0}
+            className={`flex items-center gap-2 px-6 py-4 rounded-xl font-bold transition-all active:scale-95 border
+              ${cart.length === 0 
+                ? 'bg-neutral-800 text-neutral-500 border-neutral-700 cursor-not-allowed' 
+                : 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white border-indigo-500/30 hover:border-indigo-500 shadow-sm'
+              }
+            `}
+            title="Print Receipt & Charge"
+          >
+            <Printer size={20} />
+            <span>Print</span>
+          </button>
+
           {/* Main Checkout Button */}
           <button 
-            onClick={handleCheckout}
+            onClick={() => handleCheckout(false)}
             disabled={cart.length === 0}
             className={`flex items-center gap-3 px-10 py-4 rounded-xl font-black text-lg transition-all active:scale-95 border
               ${cart.length === 0 
