@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import useCartStore from './store/cartStore';
+import ReportModal from './ReportModal';
 import {
   ShoppingCart, Receipt, Trash2, WifiOff, Coffee,
   Banknote, CreditCard, Wallet, Printer, QrCode,
-  X, CheckCircle2, Smartphone
+  X, CheckCircle2, Smartphone, BarChart2
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -256,6 +257,7 @@ export default function App() {
     cart, addToCart, removeFromCart, clearCart,
     tableNumber, setTableNumber,
     offlineOrders, addOfflineOrder, removeOfflineOrder,
+    completedOrders, recordOrder,
   } = useCartStore();
 
   const [activeCategory, setActiveCategory]   = useState('All');
@@ -263,6 +265,7 @@ export default function App() {
   const [paymentMethod, setPaymentMethod]     = useState('Cash');
   const [showUpiModal, setShowUpiModal]       = useState(false);
   const [showCardModal, setShowCardModal]     = useState(false);
+  const [showReport, setShowReport]           = useState(false);
   const [toast, setToast]                     = useState(null);   // string | null
 
   // ── Online / offline listener ──
@@ -307,6 +310,9 @@ export default function App() {
       console.log('Order placed:', payload);
     }
 
+    // Always record to local sales history for reports
+    recordOrder(payload);
+
     if (withPrint) {
       await printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paymentMethod });
     }
@@ -328,6 +334,14 @@ export default function App() {
 
   return (
     <>
+      {/* ── Report Modal ── */}
+      {showReport && (
+        <ReportModal
+          completedOrders={completedOrders}
+          onClose={() => setShowReport(false)}
+        />
+      )}
+
       {/* ── UPI Modal ── */}
       {showUpiModal && (
         <UpiQrModal
@@ -371,6 +385,14 @@ export default function App() {
                 <span>Offline ({offlineOrders.length})</span>
               </div>
             )}
+            {/* Reports button */}
+            <button
+              onClick={() => setShowReport(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-sky-400 hover:border-sky-500/40 transition-all text-sm font-semibold"
+            >
+              <BarChart2 size={16} />
+              Reports
+            </button>
             <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 px-4 py-2 rounded-xl">
               <span className="text-sm font-medium text-neutral-400">Table</span>
               <input
