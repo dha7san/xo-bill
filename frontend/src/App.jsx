@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import useCartStore from './store/cartStore';
-import { ShoppingCart, LayoutGrid, Search, Receipt, Trash2, WifiOff } from 'lucide-react';
+import { ShoppingCart, LayoutGrid, Search, Receipt, Trash2, WifiOff, Coffee, Banknote, CreditCard, Wallet, AlertCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 const DUMMY_MENU = [
@@ -12,9 +12,13 @@ const DUMMY_MENU = [
   { id: 6, name: 'Lemonade', price: 90, category: 'Beverages' },
   { id: 7, name: 'Pasta Alfredo', price: 250, category: 'Pasta' },
   { id: 8, name: 'Arrabbiata', price: 230, category: 'Pasta' },
+  { id: 9, name: 'Classic Burger', price: 180, category: 'Burgers' },
+  { id: 10, name: 'Cheese Burger', price: 220, category: 'Burgers' },
+  { id: 11, name: 'Vanilla Shake', price: 150, category: 'Beverages' },
+  { id: 12, name: 'Chocolate Brownie', price: 180, category: 'Dessert' },
 ];
 
-function App() {
+export default function App() {
   const { cart, addToCart, removeFromCart, clearCart, tableNumber, setTableNumber, offlineOrders, addOfflineOrder, removeOfflineOrder } = useCartStore();
   const [activeCategory, setActiveCategory] = useState('All');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -29,7 +33,6 @@ function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial check just in case
     if (navigator.onLine && offlineOrders.length > 0) {
       syncOfflineOrders();
     }
@@ -47,17 +50,11 @@ function App() {
     
     for (const order of offlineOrders) {
       try {
-        // Mock API Call to actual backend endpoint
-        // e.g. await axios.post('http://localhost:5000/api/billing', order)
         console.log('Successfully synced order:', order.orderNumber);
         removeOfflineOrder(order.orderNumber);
       } catch (err) {
         console.error('Failed to sync order:', order.orderNumber);
       }
-    }
-    
-    if (offlineOrders.length > 0) {
-      alert(`Successfully synced pending orders!`);
     }
   };
 
@@ -74,9 +71,8 @@ function App() {
   const handleCheckout = async () => {
     if (cart.length === 0) return alert('Cart is empty!');
     
-    // Simulate API call to standard backend format
     const payload = {
-      orderNumber: uuidv4(), // Generate UUID here
+      orderNumber: uuidv4(),
       tableNumber,
       items: cart.map(i => ({ name: i.name, qty: i.qty, price: i.price, menuItemId: i.id })),
       totalAmount: grandTotal,
@@ -86,134 +82,225 @@ function App() {
 
     if (!isOnline) {
       addOfflineOrder(payload);
-      alert(`You are offline. Order for Table ${tableNumber} has been saved locally and will sync when internet returns!`);
     } else {
       console.log('Sending to backend live:', payload);
-      // e.g. await axios.post('http://localhost:5000/api/billing', payload)
-      // If error occurs, we could catch and addOfflineOrder(payload)
-      alert(`Live order placed for Table ${tableNumber}!\nAmount: ₹${grandTotal.toFixed(2)}`);
     }
     
+    // Quick success animation or state could go here, but for now we clear cart
     clearCart();
   };
 
   return (
-    <div className="app-container panel">
-      {/* LEFT: Menu Area */}
-      <div className="main-area">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2><LayoutGrid size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '10px' }}/> Categories</h2>
-          <div style={{ display: 'flex', gap: '1rem', overflowX: 'auto', paddingBottom: '5px' }}>
+    <div className="flex flex-col h-screen w-screen bg-neutral-950 text-neutral-100 overflow-hidden font-sans select-none">
+      
+      {/* TOP: Header Navigation */}
+      <header className="flex items-center justify-between px-6 py-4 bg-neutral-950 border-b border-neutral-800 shrink-0 z-10">
+        <div className="flex space-x-3 items-center">
+          <div className="w-10 h-10 rounded-xl bg-sky-500/20 flex items-center justify-center text-sky-400 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+            <Coffee size={24} strokeWidth={2.5} />
+          </div>
+          <div>
+            <h1 className="text-xl font-extrabold tracking-tight text-white leading-tight">XoPOS</h1>
+            <p className="text-xs text-neutral-500 font-medium tracking-wide uppercase">Table Setup</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-6">
+          {!isOnline && (
+            <div className="flex items-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 px-3 py-1.5 rounded-full text-sm font-semibold shadow-[0_0_20px_rgba(239,68,68,0.1)]">
+              <WifiOff size={16} />
+              <span>Offline ({offlineOrders.length})</span>
+            </div>
+          )}
+          
+          <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 px-4 py-2 rounded-xl">
+            <span className="text-sm font-medium text-neutral-400">Table</span>
+            <input 
+              type="number" 
+              value={tableNumber} 
+              onChange={(e) => setTableNumber(Number(e.target.value))}
+              className="w-12 bg-transparent text-white font-bold text-lg text-center outline-none [&::-webkit-inner-spin-button]:appearance-none"
+              min="1"
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* MID: Main Application Area (Left Menu, Right Bill) */}
+      <div className="flex flex-1 overflow-hidden relative">
+        
+        {/* LEFT: Menu Items */}
+        <main className="flex-[3] flex flex-col bg-neutral-950 border-r border-neutral-800 relative z-0 hide-scrollbar">
+          
+          {/* Category Chips Ribbon */}
+          <div className="p-6 shrink-0 flex gap-3 overflow-x-auto custom-scrollbar">
             {categories.map(cat => (
               <button 
                 key={cat} 
-                className={`panel ${activeCategory === cat ? 'active' : ''}`}
-                style={{ 
-                  padding: '0.5rem 1rem', 
-                  borderRadius: '20px', 
-                  cursor: 'pointer',
-                  border: activeCategory === cat ? '1px solid var(--accent)' : '1px solid var(--border)',
-                  background: activeCategory === cat ? 'rgba(56, 189, 248, 0.2)' : 'var(--bg-card)',
-                  color: 'white'
-                }}
+                className={`whitespace-nowrap px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${
+                  activeCategory === cat 
+                    ? 'bg-sky-500 text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] scale-105' 
+                    : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-white border border-neutral-800'
+                }`}
                 onClick={() => setActiveCategory(cat)}
               >
                 {cat}
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="menu-grid fade-in">
-          {filteredMenu.map(item => (
-            <div key={item.id} className="menu-item" onClick={() => addToCart(item)}>
-              <div className="name">{item.name}</div>
-              <div className="price">₹{item.price}</div>
+          {/* Menu Grid */}
+          <div className="flex-1 p-6 pt-0 overflow-y-auto custom-scrollbar relative">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 pb-20">
+              {filteredMenu.map(item => (
+                <div 
+                  key={item.id}
+                  onClick={() => addToCart(item)}
+                  className="group relative flex flex-col justify-between h-40 bg-neutral-900 border border-neutral-800 p-5 rounded-2xl cursor-pointer hover:border-sky-500/50 transition-all duration-300 hover:shadow-[0_8px_30px_rgba(56,189,248,0.08)] hover:-translate-y-1 overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-sky-500/10 transition-all duration-500"></div>
+                  <div className="font-semibold text-lg text-neutral-300 group-hover:text-white transition-colors z-10 leading-tight">
+                    {item.name}
+                  </div>
+                  <div className="flex justify-between items-end z-10">
+                    <div className="text-sky-400 font-bold text-xl drop-shadow-sm">
+                      ₹{item.price}
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center group-hover:bg-sky-500 text-neutral-400 group-hover:text-white transition-colors">
+                      <span className="text-xl font-light">+</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+            
+            {/* Soft gradient at the bottom of the list */}
+            <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-neutral-950 to-transparent pointer-events-none"></div>
+          </div>
+        </main>
 
-      {/* RIGHT: Cart Area */}
-      <div className="cart-sidebar panel">
-        <div className="cart-header">
-          <h3>
-            <ShoppingCart size={20} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }}/> 
-            Current Order
-          </h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {!isOnline && (
-              <span className="badge" title={`${offlineOrders.length} pending orders`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <WifiOff size={12} />
-                Offline ({offlineOrders.length})
-              </span>
+        {/* RIGHT: Current Bill */}
+        <aside className="w-[380px] flex flex-col bg-neutral-900/40 relative z-10 backdrop-blur-md">
+          <div className="p-5 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/80 shrink-0">
+            <h2 className="text-lg font-semibold flex items-center gap-2 text-white">
+              <Receipt className="w-5 h-5 text-sky-400" />
+              Current Order
+            </h2>
+            {cart.length > 0 && (
+              <button 
+                onClick={clearCart} 
+                className="text-neutral-500 hover:text-red-400 p-2 rounded-full hover:bg-red-500/10 transition-colors"
+                title="Clear Cart"
+              >
+                <Trash2 size={18} />
+              </button>
             )}
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Table</span>
-            <input 
-              type="number" 
-              value={tableNumber} 
-              onChange={(e) => setTableNumber(Number(e.target.value))}
-              style={{ width: '50px', padding: '5px', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border)', borderRadius: '4px' }}
-              min="1"
-            />
-            <Trash2 
-               size={20} 
-               color="var(--danger)" 
-               cursor="pointer" 
-               onClick={clearCart}
-               style={{ marginLeft: '10px' }}
-            />
-          </div>
-        </div>
-
-        <div className="cart-items">
-          {cart.length === 0 ? (
-            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '2rem' }}>
-              Cart is empty. Select items to add.
-            </div>
-          ) : (
-            cart.map(item => (
-              <div key={item.id} className="cart-item fade-in">
-                <div className="cart-item-details">
-                  <span className="cart-item-name">{item.name}</span>
-                  <span className="cart-item-price">₹{item.price} × {item.qty}</span>
-                </div>
-                <div className="qty-controls">
-                  <button className="qty-btn" onClick={() => removeFromCart(item.id)}>-</button>
-                  <span>{item.qty}</span>
-                  <button className="qty-btn" onClick={() => addToCart(item)}>+</button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="cart-footer">
-          <div className="totals-row">
-            <span>Subtotal</span>
-            <span>₹{subTotal.toFixed(2)}</span>
-          </div>
-          <div className="totals-row">
-            <span>SGST (2.5%)</span>
-            <span>₹{(gst / 2).toFixed(2)}</span>
-          </div>
-          <div className="totals-row">
-            <span>CGST (2.5%)</span>
-            <span>₹{(gst / 2).toFixed(2)}</span>
-          </div>
-          <div className="totals-row grand-total">
-            <span>Total</span>
-            <span style={{ color: 'var(--accent)' }}>₹{grandTotal.toFixed(2)}</span>
           </div>
           
-          <button className="btn-primary" style={{ marginTop: '1rem' }} onClick={handleCheckout}>
-            <Receipt size={20} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} />
-            Charge ₹{grandTotal.toFixed(2)}
+          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3 custom-scrollbar">
+            {cart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-neutral-500 space-y-4">
+                <ShoppingCart className="w-16 h-16 opacity-20" />
+                <p className="font-medium text-sm">Add items from the menu</p>
+              </div>
+            ) : (
+              cart.map(item => (
+                <div key={item.id} className="flex items-center justify-between bg-neutral-900 p-4 rounded-2xl border border-neutral-800/80 shadow-sm animate-[fadeIn_0.2s_ease-out]">
+                  <div className="flex flex-col max-w-[150px]">
+                    <span className="font-medium text-white truncate" title={item.name}>{item.name}</span>
+                    <span className="text-sm font-semibold text-sky-400 mt-1">₹{item.price * item.qty}</span>
+                  </div>
+                  <div className="flex items-center gap-3 bg-neutral-950 rounded-full px-1 py-1 border border-neutral-800">
+                    <button onClick={() => removeFromCart(item.id)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors">
+                      <span className="text-lg leading-none mb-[2px]">-</span>
+                    </button>
+                    <span className="text-sm font-bold w-4 text-center text-white">{item.qty}</span>
+                    <button onClick={() => addToCart(item)} className="w-8 h-8 flex items-center justify-center rounded-full bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 transition-colors">
+                      <span className="text-lg leading-none mb-[2px]">+</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Bill Totals Container (Sits within Right Side but connects visually to Bottom) */}
+          <div className="p-5 border-t border-neutral-800 bg-neutral-900/90 shrink-0 space-y-3">
+            <div className="flex justify-between text-neutral-400 text-sm font-medium">
+              <span>Subtotal</span>
+              <span>₹{subTotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-neutral-400 text-sm font-medium">
+              <span>GST (5%)</span>
+              <span>₹{gst.toFixed(2)}</span>
+            </div>
+            <div className="pt-3 border-t border-neutral-800 border-dashed m-0"></div>
+          </div>
+        </aside>
+      </div>
+
+      {/* BOTTOM: Payment Actions Pane */}
+      <div className="h-28 shrink-0 bg-neutral-900 border-t border-neutral-800 px-8 flex items-center justify-between shadow-[0_-10px_40px_rgba(0,0,0,0.4)] z-20">
+        
+        {/* Total Prominent Display */}
+        <div className="flex flex-col">
+          <span className="text-neutral-400 text-sm font-bold uppercase tracking-wider mb-1">Amount to Pay</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl text-sky-400 font-bold">₹</span>
+            <span className="text-4xl font-black text-white tracking-tight">{grandTotal.toFixed(2)}</span>
+          </div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex items-center gap-4">
+          <button className="flex items-center gap-2 px-6 py-4 rounded-xl font-bold bg-neutral-950 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-all border border-neutral-800 shadow-sm active:scale-95">
+            <Banknote size={20} className="text-emerald-400" /> 
+            <span>Cash</span>
+          </button>
+          
+          <button className="flex items-center gap-2 px-6 py-4 rounded-xl font-bold bg-neutral-950 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-all border border-neutral-800 shadow-sm active:scale-95">
+            <CreditCard size={20} className="text-indigo-400" /> 
+            <span>Card</span>
+          </button>
+          
+          {/* Main Checkout Button */}
+          <button 
+            onClick={handleCheckout}
+            disabled={cart.length === 0}
+            className={`flex items-center gap-3 px-10 py-4 rounded-xl font-black text-lg transition-all active:scale-95 border
+              ${cart.length === 0 
+                ? 'bg-neutral-800 text-neutral-500 border-neutral-700 cursor-not-allowed' 
+                : 'bg-sky-500 text-white hover:bg-sky-400 border-sky-400 shadow-[0_0_20px_rgba(14,165,233,0.3)] hover:shadow-[0_0_30px_rgba(14,165,233,0.5)]'
+              }
+            `}
+          >
+            <Wallet size={24} />
+            <span>Charge Bill</span>
           </button>
         </div>
+        
       </div>
+
+      {/* Basic Utility Styles */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #333;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+      `}} />
     </div>
   );
 }
-
-export default App;
