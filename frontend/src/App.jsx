@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import useCartStore from './store/cartStore';
+import useInventoryStore from './store/inventoryStore';
 import ReportModal from './ReportModal';
+import InventoryModal from './InventoryModal';
 import {
   ShoppingCart, Receipt, Trash2, WifiOff, Coffee,
   Banknote, CreditCard, Wallet, Printer, QrCode,
-  X, CheckCircle2, Smartphone, BarChart2
+  X, CheckCircle2, Smartphone, BarChart2, Package
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -266,7 +268,11 @@ export default function App() {
   const [showUpiModal, setShowUpiModal]       = useState(false);
   const [showCardModal, setShowCardModal]     = useState(false);
   const [showReport, setShowReport]           = useState(false);
+  const [showInventory, setShowInventory]     = useState(false);
   const [toast, setToast]                     = useState(null);   // string | null
+
+  const { ingredients, deductIngredients } = useInventoryStore();
+  const lowStockCount = ingredients.filter(i => i.stock <= i.minStock).length;
 
   // ── Online / offline listener ──
   useEffect(() => {
@@ -313,6 +319,9 @@ export default function App() {
     // Always record to local sales history for reports
     recordOrder(payload);
 
+    // Deduct ingredients for each ordered item
+    deductIngredients(payload.items);
+
     if (withPrint) {
       await printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paymentMethod });
     }
@@ -334,6 +343,9 @@ export default function App() {
 
   return (
     <>
+      {/* ── Inventory Modal ── */}
+      {showInventory && <InventoryModal onClose={() => setShowInventory(false)} />}
+
       {/* ── Report Modal ── */}
       {showReport && (
         <ReportModal
@@ -385,6 +397,19 @@ export default function App() {
                 <span>Offline ({offlineOrders.length})</span>
               </div>
             )}
+            {/* Inventory button */}
+            <button
+              onClick={() => setShowInventory(true)}
+              className="relative flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-violet-400 hover:border-violet-500/40 transition-all text-sm font-semibold"
+            >
+              <Package size={16} />
+              Inventory
+              {lowStockCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-yellow-500 text-neutral-950 text-[10px] font-black rounded-full flex items-center justify-center leading-none">
+                  {lowStockCount}
+                </span>
+              )}
+            </button>
             {/* Reports button */}
             <button
               onClick={() => setShowReport(true)}
