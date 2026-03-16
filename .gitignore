@@ -1,2 +1,12 @@
 node_modules/
+
+# Environment — never commit real secrets
 .env
+.env.local
+.env.*.local
+
+# Keep the example template in git (no real values inside)
+!.env.example
+
+# Build output
+dist/

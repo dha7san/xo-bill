@@ -3,16 +3,18 @@ import useCartStore from './store/cartStore';
 import useInventoryStore from './store/inventoryStore';
 import ReportModal from './ReportModal';
 import InventoryModal from './InventoryModal';
+import { AppLockScreen, ManagerPinModal, useAppSecurity } from './PinGate';
+import { CONFIG } from './config';
 import {
   ShoppingCart, Receipt, Trash2, WifiOff, Coffee,
   Banknote, CreditCard, Wallet, Printer, QrCode,
-  X, CheckCircle2, Smartphone, BarChart2, Package
+  X, CheckCircle2, Smartphone, BarChart2, Package, Lock
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
-// ─── Config ────────────────────────────────────────────────────────────────
-const UPI_ID  = 'yourshop@upi';   // ← change to your merchant UPI ID
-const STORE_NAME = 'XoPOS';
+// ─── Config (from environment variables via config.js) ────────────────────
+const UPI_ID    = CONFIG.upiId;
+const STORE_NAME = CONFIG.storeName;
 
 const DUMMY_MENU = [
   { id: 1,  name: 'Margherita Pizza',  price: 299, category: 'Pizza'     },
@@ -271,6 +273,12 @@ export default function App() {
   const [showInventory, setShowInventory]     = useState(false);
   const [toast, setToast]                     = useState(null);   // string | null
 
+  const {
+    cashierUnlocked, showManagerModal,
+    unlockCashier, lockCashier,
+    requireManager, onManagerUnlock, onManagerCancel,
+  } = useAppSecurity();
+
   const { ingredients, deductIngredients } = useInventoryStore();
   const lowStockCount = ingredients.filter(i => i.stock <= i.minStock).length;
 
@@ -292,7 +300,7 @@ export default function App() {
   };
 
   const subTotal   = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const gst        = subTotal * 0.05;
+  const gst        = subTotal * CONFIG.gstRate;
   const grandTotal = subTotal + gst;
 
   const categories   = ['All', ...new Set(DUMMY_MENU.map(i => i.category))];
@@ -343,6 +351,17 @@ export default function App() {
 
   return (
     <>
+      {/* ── App lock screen — shown until cashier PIN entered ── */}
+      {!cashierUnlocked && <AppLockScreen onUnlock={unlockCashier} />}
+
+      {/* ── Manager PIN modal ── */}
+      {showManagerModal && (
+        <ManagerPinModal
+          title="Manager Access"
+          onUnlock={onManagerUnlock}
+          onCancel={onManagerCancel}
+        />
+      )}
       {/* ── Inventory Modal ── */}
       {showInventory && <InventoryModal onClose={() => setShowInventory(false)} />}
 
@@ -399,7 +418,7 @@ export default function App() {
             )}
             {/* Inventory button */}
             <button
-              onClick={() => setShowInventory(true)}
+              onClick={() => requireManager(() => setShowInventory(true))}
               className="relative flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-violet-400 hover:border-violet-500/40 transition-all text-sm font-semibold"
             >
               <Package size={16} />
@@ -412,11 +431,20 @@ export default function App() {
             </button>
             {/* Reports button */}
             <button
-              onClick={() => setShowReport(true)}
+              onClick={() => requireManager(() => setShowReport(true))}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-sky-400 hover:border-sky-500/40 transition-all text-sm font-semibold"
             >
               <BarChart2 size={16} />
               Reports
+            </button>
+            {/* Lock button */}
+            <button
+              onClick={lockCashier}
+              title="Lock terminal"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:border-red-500/40 transition-all text-sm font-semibold"
+            >
+              <Lock size={16} />
+              Lock
             </button>
             <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 px-4 py-2 rounded-xl">
               <span className="text-sm font-medium text-neutral-400">Table</span>
