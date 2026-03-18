@@ -13,14 +13,25 @@ export default function AdminPanel({ onClose }) {
     isLoading 
   } = useMenuStore();
 
-  const [activeTab, setActiveTab] = useState('categories'); // 'categories' | 'items'
+  const [activeTab, setActiveTab] = useState('categories'); // 'categories' | 'items' | 'printers'
   const [editingItem, setEditingItem] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [editingPrinter, setEditingPrinter] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  const [printers, setPrinters] = useState([]);
 
   useEffect(() => {
     fetchMenu();
-  }, [fetchMenu]);
+    if (activeTab === 'printers') fetchPrinters();
+  }, [fetchMenu, activeTab]);
+
+  const fetchPrinters = async () => {
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/print`);
+      setPrinters(res.data.data);
+    } catch (err) { console.error(err); }
+  };
 
   // CATEGORY FORM STATE
   const [catName, setCatName] = useState('');
@@ -33,9 +44,17 @@ export default function AdminPanel({ onClose }) {
   const [itemCategory, setItemCategory] = useState('');
   const [itemDesc, setItemDesc] = useState('');
 
+  // PRINTER FORM STATE
+  const [printerName, setPrinterName] = useState('');
+  const [printerType, setPrinterType] = useState('LAN');
+  const [printerHost, setPrinterHost] = useState('');
+  const [printerPort, setPrinterPort] = useState(9100);
+  const [printerRole, setPrinterRole] = useState('Receipt');
+
   const resetForms = () => {
     setEditingItem(null);
     setEditingCategory(null);
+    setEditingPrinter(null);
     setCatName('');
     setCatDesc('');
     setCatColor('#3b82f6');
@@ -43,23 +62,21 @@ export default function AdminPanel({ onClose }) {
     setItemPrice('');
     setItemCategory('');
     setItemDesc('');
+    setPrinterName('');
+    setPrinterType('LAN');
+    setPrinterHost('');
+    setPrinterPort(9100);
+    setPrinterRole('Receipt');
     setIsFormOpen(false);
   };
 
-  const handleEditCategory = (cat) => {
-    setEditingCategory(cat);
-    setCatName(cat.name);
-    setCatDesc(cat.description || '');
-    setCatColor(cat.imageColorOrUrl || '#3b82f6');
-    setIsFormOpen(true);
-  };
-
-  const handleEditItem = (item) => {
-    setEditingItem(item);
-    setItemName(item.name);
-    setItemPrice(item.basePrice);
-    setItemCategory(item.category?._id || item.category || '');
-    setItemDesc(item.description || '');
+  const handleEditPrinter = (p) => {
+    setEditingPrinter(p);
+    setPrinterName(p.name);
+    setPrinterType(p.type);
+    setPrinterHost(p.host || '');
+    setPrinterPort(p.port || 9100);
+    setPrinterRole(p.role || 'Receipt');
     setIsFormOpen(true);
   };
 
@@ -97,6 +114,29 @@ export default function AdminPanel({ onClose }) {
     }
   };
 
+  const onSavePrinter = async () => {
+    if (!printerName) return alert('Name is required');
+    try {
+      const data = { name: printerName, type: printerType, host: printerHost, port: printerPort, role: printerRole };
+      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/print/register`, data);
+      fetchPrinters();
+      resetForms();
+    } catch (err) { alert(err.message); }
+  };
+
+  const onRemovePrinter = async (id) => {
+    if (!confirm('Remove printer?')) return;
+    await axios.delete(`${import.meta.env.VITE_API_BASE_URL}/print/${id}`);
+    fetchPrinters();
+  };
+
+  const onTestPrinter = async (id) => {
+    try {
+      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/print/test/${id}`);
+      alert('Test sent');
+    } catch (err) { alert('Test failed: ' + err.message); }
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-[fadeIn_0.2s_ease]">
       <div className="relative bg-neutral-950 border border-neutral-800 rounded-3xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
@@ -121,7 +161,8 @@ export default function AdminPanel({ onClose }) {
         <div className="flex px-8 border-b border-neutral-800 bg-neutral-900/40 shrink-0">
           {[
             { id: 'categories', label: 'Categories', icon: Layout },
-            { id: 'items', label: 'Menu Items', icon: Coffee }
+            { id: 'items', label: 'Menu Items', icon: Coffee },
+            { id: 'printers', label: 'Hardware (Printers)', icon: Printer }
           ].map(tab => (
             <button
               key={tab.id}
@@ -144,14 +185,14 @@ export default function AdminPanel({ onClose }) {
           <div className="flex-1 overflow-y-auto p-8 thin-scrollbar">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                {activeTab === 'categories' ? <Tag size={18} /> : <Coffee size={18} />}
-                {activeTab === 'categories' ? 'All Categories' : 'All Menu Items'}
+                {activeTab === 'categories' ? <Tag size={18} /> : (activeTab === 'items' ? <Coffee size={18} /> : <Printer size={18} />)}
+                {activeTab === 'categories' ? 'All Categories' : (activeTab === 'items' ? 'All Menu Items' : 'Connected Printers')}
               </h3>
               <button 
                 onClick={() => setIsFormOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-xl font-bold text-sm transition-all shadow-[0_0_15px_rgba(14,165,233,0.3)]"
               >
-                <Plus size={18} /> Add {activeTab === 'categories' ? 'Category' : 'Item'}
+                <Plus size={18} /> Add {activeTab === 'categories' ? 'Category' : (activeTab === 'items' ? 'Item' : 'Printer')}
               </button>
             </div>
 
@@ -161,8 +202,7 @@ export default function AdminPanel({ onClose }) {
                </div>
             ) : (
               <div className="grid grid-cols-1 gap-3">
-                {activeTab === 'categories' ? (
-                  categories.map(cat => (
+                {activeTab === 'categories' && categories.map(cat => (
                     <div key={cat._id} className="flex items-center justify-between p-4 bg-neutral-900/60 border border-neutral-800 rounded-2xl hover:border-neutral-700 transition-all group">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-black" style={{ backgroundColor: cat.imageColorOrUrl || '#3b82f6' }}>
@@ -178,9 +218,9 @@ export default function AdminPanel({ onClose }) {
                         <button onClick={() => removeCategory(cat._id)} className="p-2 text-neutral-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"><Trash2 size={18} /></button>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  menuItems.map(item => (
+                ))}
+
+                {activeTab === 'items' && menuItems.map(item => (
                     <div key={item._id} className="flex items-center justify-between p-4 bg-neutral-900/60 border border-neutral-800 rounded-2xl hover:border-neutral-700 transition-all group">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-neutral-800 border border-neutral-700 rounded-xl flex items-center justify-center text-sky-500"><Coffee size={20} /></div>
@@ -194,10 +234,27 @@ export default function AdminPanel({ onClose }) {
                         <button onClick={() => removeItem(item._id)} className="p-2 text-neutral-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"><Trash2 size={18} /></button>
                       </div>
                     </div>
-                  ))
-                )}
+                ))}
+
+                {activeTab === 'printers' && printers.map(p => (
+                    <div key={p._id} className="flex items-center justify-between p-4 bg-neutral-900/60 border border-neutral-800 rounded-2xl hover:border-neutral-700 transition-all group">
+                      <div className="flex items-center gap-4">
+                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${p.status === 'online' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
+                            <Printer size={20} />
+                         </div>
+                         <div>
+                            <div className="font-bold text-white flex items-center gap-2">{p.name} <span className="text-[10px] px-1.5 py-0.5 bg-neutral-800 rounded-md text-neutral-500 border border-neutral-700">{p.role}</span></div>
+                            <div className="text-xs text-neutral-500">{p.type} • {p.host || 'USB'} {p.status}</div>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={() => onTestPrinter(p._id)} className="px-3 py-1.5 text-[10px] font-black uppercase text-sky-400 bg-sky-400/10 rounded-lg hover:bg-sky-400/20 transition-all">Test</button>
+                        <button onClick={() => onRemovePrinter(p._id)} className="p-2 text-neutral-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"><Trash2 size={18} /></button>
+                      </div>
+                    </div>
+                ))}
                 
-                {(activeTab === 'categories' ? categories.length : menuItems.length) === 0 && (
+                {(activeTab === 'categories' ? categories.length : (activeTab === 'items' ? menuItems.length : printers.length)) === 0 && (
                    <div className="flex flex-col items-center justify-center py-12 text-neutral-600 border-2 border-dashed border-neutral-800 rounded-3xl">
                       <AlertCircle size={40} strokeWidth={1} className="mb-2" />
                       <p className="font-medium">No {activeTab} found</p>
@@ -212,14 +269,14 @@ export default function AdminPanel({ onClose }) {
             <div className="w-[380px] border-l border-neutral-800 bg-neutral-900/20 p-8 overflow-y-auto animate-[fadeIn_0.3s_ease]">
               <div className="flex items-center justify-between mb-8">
                 <h4 className="text-lg font-black text-white">
-                  {editingCategory || editingItem ? 'Edit ' : 'New '} 
-                  {activeTab === 'categories' ? 'Category' : 'Menu Item'}
+                  {editingCategory || editingItem || editingPrinter ? 'Edit ' : 'New '} 
+                  {activeTab === 'categories' ? 'Category' : (activeTab === 'items' ? 'Menu Item' : 'Printer')}
                 </h4>
                 <button onClick={resetForms} className="text-neutral-500 hover:text-white"><X size={20} /></button>
               </div>
 
               <div className="space-y-6">
-                {activeTab === 'categories' ? (
+                {activeTab === 'categories' && (
                   <>
                     <div className="space-y-2">
                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-tighter">Category Name</label>
@@ -246,7 +303,9 @@ export default function AdminPanel({ onClose }) {
                        </div>
                     </div>
                   </>
-                ) : (
+                )}
+
+                {activeTab === 'items' && (
                   <>
                     <div className="space-y-2">
                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-tighter">Item Name</label>
@@ -288,6 +347,44 @@ export default function AdminPanel({ onClose }) {
                   </>
                 )}
 
+                {activeTab === 'printers' && (
+                  <>
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-tighter">Printer Name</label>
+                       <input value={printerName} onChange={e => setPrinterName(e.target.value)} placeholder="e.g. Kitchen Thermal" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white outline-none focus:border-sky-500 font-medium" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                          <label className="text-xs font-bold text-neutral-500 uppercase tracking-tighter">Type</label>
+                          <select value={printerType} onChange={e => setPrinterType(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-3 text-white outline-none">
+                             <option value="LAN">LAN (Network)</option>
+                             <option value="USB">USB (Local)</option>
+                          </select>
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-xs font-bold text-neutral-500 uppercase tracking-tighter">Role</label>
+                          <select value={printerRole} onChange={e => setPrinterRole(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-3 text-white outline-none">
+                             <option value="Receipt">Bill/Receipt</option>
+                             <option value="Kitchen">Kitchen (KOT)</option>
+                             <option value="Bar">Bar/Drinks</option>
+                          </select>
+                       </div>
+                    </div>
+                    {printerType === 'LAN' && (
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-2 space-y-2">
+                          <label className="text-xs font-bold text-neutral-500 uppercase tracking-tighter">IP / Host</label>
+                          <input value={printerHost} onChange={e => setPrinterHost(e.target.value)} placeholder="192.168.1.100" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white outline-none focus:border-sky-500 font-mono text-sm" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-neutral-500 uppercase tracking-tighter">Port</label>
+                          <input value={printerPort} onChange={e => setPrinterPort(e.target.value)} placeholder="9100" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white outline-none focus:border-sky-500 font-mono text-sm" />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <div className="pt-4 flex gap-3">
                   <button 
                     onClick={resetForms}
@@ -296,7 +393,7 @@ export default function AdminPanel({ onClose }) {
                     Cancel
                   </button>
                   <button 
-                    onClick={activeTab === 'categories' ? onSaveCategory : onSaveItem}
+                    onClick={activeTab === 'categories' ? onSaveCategory : (activeTab === 'items' ? onSaveItem : onSavePrinter)}
                     className="flex-1 py-3 bg-sky-500 text-white font-black rounded-2xl hover:bg-sky-400 transition-all shadow-[0_4px_15px_rgba(14,165,233,0.3)] flex items-center justify-center gap-2"
                   >
                     <Save size={18} /> Save

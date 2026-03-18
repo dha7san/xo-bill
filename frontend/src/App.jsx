@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
+import { printManager } from './services/printManager';
 
 // ─── Config (from environment variables via config.js) ────────────────────
 const UPI_ID    = CONFIG.upiId;
@@ -197,6 +198,7 @@ export default function App() {
     
     fetchMenu();
     fetchInventory();
+    printManager.init();
 
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
@@ -215,6 +217,7 @@ export default function App() {
       window.removeEventListener('offline', down);
       window.removeEventListener('keydown', handleKeyDown);
       stopInv();
+      printManager.destroy();
     };
   }, [fetchMenu, fetchInventory, cart.length, syncStock]);
 
@@ -244,7 +247,17 @@ export default function App() {
 
     recordOrder(payload);
     await localDB.savePendingOrder({ id: orderId, payload });
-    if (withPrint) await printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paymentMethod });
+    
+    if (withPrint) {
+      try {
+        await axios.post(`${CONFIG.apiBaseUrl}/print?role=Receipt`, payload);
+      } catch (err) {
+        console.error('Print trigger failed:', err);
+        // Fallback to local if backend is unreachable or fails
+        await printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paymentMethod });
+      }
+    }
+
     deductIngredients(payload.items);
     syncManager.sync();
     clearCart();
@@ -363,13 +376,13 @@ export default function App() {
                     <ShoppingCart size={64} /><p className="font-black uppercase tracking-widest text-sm">Empty Cart</p>
                   </div>
                 ) : cart.map(item => (
-                   <div key={item.menuItemId || item.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-4 flex flex-col gap-4">
+                   <div key={item._id || item.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-4 flex flex-col gap-4">
                       <div className="flex justify-between items-start gap-4">
                         <span className="font-bold text-sm text-neutral-200 line-clamp-1">{item.name}</span>
                         <span className="font-black text-sm text-sky-400">₹{(item.price * item.qty).toFixed(0)}</span>
                       </div>
                       <div className="flex items-center justify-end gap-3">
-                         <button onClick={() => removeFromCart(item.menuItemId || item.id)} className="w-10 h-10 rounded-2xl bg-neutral-950 border border-neutral-800 text-neutral-400 flex items-center justify-center hover:text-red-400 active:scale-95 transition-all"><span className="text-2xl font-black mb-1">−</span></button>
+                         <button onClick={() => removeFromCart(item._id || item.id)} className="w-10 h-10 rounded-2xl bg-neutral-950 border border-neutral-800 text-neutral-400 flex items-center justify-center hover:text-red-400 active:scale-95 transition-all"><span className="text-2xl font-black mb-1">−</span></button>
                          <span className="w-5 text-center font-black text-lg text-white">{item.qty}</span>
                          <button onClick={() => addToCart(item)} className="w-10 h-10 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center hover:bg-sky-500/20 active:scale-95 transition-all"><span className="text-2xl font-black mb-1">+</span></button>
                       </div>

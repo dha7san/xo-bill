@@ -12,10 +12,12 @@ const useCartStore = create(
       setTableNumber: (num) => set({ tableNumber: num }),
 
       addToCart: (item) => set((state) => {
-        const existing = state.cart.find((i) => i.id === item.id);
+        const itemId = item._id || item.id;
+        const existing = state.cart.find((i) => (i._id || i.id) === itemId);
+        
         if (existing) {
           return {
-            cart: state.cart.map((i) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
+            cart: state.cart.map((i) => (i._id || i.id) === itemId ? { ...i, qty: i.qty + 1 } : i)
           };
         }
         return { cart: [...state.cart, { ...item, qty: 1 }] };
@@ -23,7 +25,7 @@ const useCartStore = create(
 
       removeFromCart: (itemId) => set((state) => ({
         cart: state.cart
-          .map(i => i.id === itemId ? { ...i, qty: Math.max(0, i.qty - 1) } : i)
+          .map(i => (i._id || i.id) === itemId ? { ...i, qty: Math.max(0, i.qty - 1) } : i)
           .filter(i => i.qty > 0)
       })),
 
