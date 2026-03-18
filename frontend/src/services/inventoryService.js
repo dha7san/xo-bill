@@ -52,4 +52,10 @@ export const inventoryService = {
     const { data } = await axios.get(`${BASE}/alerts`);
     return data;
   },
+
+  /** Get stock movement logs */
+  getLogs: async (params = {}) => {
+    const { data } = await axios.get(`${BASE}/logs`, { params });
+    return data;
+  },
 };

@@ -1,4 +1,5 @@
 const Inventory = require('../../models/Inventory');
+const InventoryLog = require('../../models/InventoryLog');
 
 // Static recipes for mapping menu items (names) to inventory ingredients (skuCodes)
 // We use names instead of IDs because MongoDB IDs can change on reseed
@@ -33,7 +34,17 @@ class InventoryService {
   }
 
   async createInventoryItem(data) {
-    return Inventory.create(data);
+    const item = await Inventory.create(data);
+    await InventoryLog.create({
+      inventoryId: item._id,
+      skuCode: item.skuCode,
+      type: 'initial',
+      quantity: item.currentStock,
+      action: 'Initial stock',
+      previousStock: 0,
+      newStock: item.currentStock
+    });
+    return item;
   }
 
   async upsertBySkuCode(skuCode, data) {
@@ -48,16 +59,29 @@ class InventoryService {
     return Inventory.findByIdAndUpdate(id, data, { new: true });
   }
 
-  async updateStock(id, quantityChange) {
+  async updateStock(id, quantityChange, action = 'Manual Adjustment') {
     const item = await Inventory.findById(id);
     if (!item) {
       const error = new Error('Inventory item not found');
       error.status = 404;
       throw error;
     }
+    const previousStock = item.currentStock;
     item.currentStock = Math.max(0, item.currentStock + quantityChange);
     item.lastRestockedDate = quantityChange > 0 ? new Date() : item.lastRestockedDate;
-    return item.save();
+    const saved = await item.save();
+
+    await InventoryLog.create({
+      inventoryId: id,
+      skuCode: item.skuCode,
+      type: quantityChange > 0 ? 'restock' : 'adjustment',
+      quantity: Math.abs(quantityChange),
+      action,
+      previousStock,
+      newStock: saved.currentStock
+    });
+
+    return saved;
   }
 
   async restockBySku(skuCode, qty) {
@@ -67,9 +91,22 @@ class InventoryService {
       error.status = 404;
       throw error;
     }
+    const previousStock = item.currentStock;
     item.currentStock = Math.max(0, item.currentStock + Number(qty));
     item.lastRestockedDate = new Date();
-    return item.save();
+    const saved = await item.save();
+
+    await InventoryLog.create({
+      inventoryId: item._id,
+      skuCode,
+      type: 'restock',
+      quantity: Number(qty),
+      action: 'Restock via SKU',
+      previousStock,
+      newStock: saved.currentStock
+    });
+
+    return saved;
   }
 
   async updateMinStockBySku(skuCode, reorderLevel) {
@@ -85,30 +122,39 @@ class InventoryService {
 
   /**
    * Bulk deduct stock when an order is placed.
-   * deductions: [{ skuCode, qty }]
+   * deductions: [{ skuCode, qty, orderNumber }]
    */
   async bulkDeduct(deductions) {
     const results = [];
-    for (const { skuCode, qty } of deductions) {
+    for (const { skuCode, qty, orderNumber } of deductions) {
       const item = await Inventory.findOne({ skuCode });
-      if (!item) continue; // skip unknown ingredients gracefully
+      if (!item) continue; 
+      
+      const previousStock = item.currentStock;
       item.currentStock = Math.max(0, item.currentStock - Number(qty));
-      await item.save();
+      const saved = await item.save();
+      
+      await InventoryLog.create({
+        inventoryId: item._id,
+        skuCode,
+        type: 'deduction',
+        quantity: Number(qty),
+        action: orderNumber ? `Order #${orderNumber}` : 'Bulk Deduction',
+        previousStock,
+        newStock: saved.currentStock
+      });
+
       results.push({ skuCode, newStock: item.currentStock });
     }
     return results;
   }
 
-  /**
-   * Bulk upsert for seeding. data: array of ingredient objects.
-   * Skips items that already exist (by skuCode) so it won't overwrite real data.
-   */
   async seed(items) {
     const results = [];
     for (const item of items) {
       const existing = await Inventory.findOne({ skuCode: item.skuCode });
       if (!existing) {
-        const created = await Inventory.create(item);
+        await this.createInventoryItem(item);
         results.push({ skuCode: item.skuCode, action: 'created' });
       } else {
         results.push({ skuCode: item.skuCode, action: 'skipped' });
@@ -123,22 +169,22 @@ class InventoryService {
     });
   }
 
-  /**
-   * Deduct stock based on an order.
-   * Looks up items by name for recipe matching.
-   */
-  async deductByOrder(items) {
+  async getLogs(query = {}) {
+    const filter = {};
+    if (query.inventoryId) filter.inventoryId = query.inventoryId;
+    if (query.skuCode) filter.skuCode = query.skuCode;
+    return InventoryLog.find(filter).sort({ createdAt: -1 }).limit(100).populate('inventoryId', 'itemName');
+  }
+
+  async deductByOrder(items, orderNumber) {
     const deductions = [];
     for (const item of items) {
-      // 1. Fallback to hardcoded recipes by name
       const recipe = RECIPES_BY_NAME[item.name];
       if (recipe) {
         recipe.forEach(r => {
-          deductions.push({ skuCode: r.skuCode, qty: r.qty * item.qty });
+          deductions.push({ skuCode: r.skuCode, qty: r.qty * item.qty, orderNumber });
         });
       }
-      
-      // 2. If item has recipeLink populated, we'd use that here (future enhancement)
     }
 
     if (deductions.length > 0) {

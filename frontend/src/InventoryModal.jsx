@@ -153,6 +153,54 @@ function IngredientCard({ ingredient, onRestock, onUpdateMin }) {
 }
 
 // ─── Menu item recipe popup ────────────────────────────────────────────────
+function LogsView({ logs }) {
+  if (logs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-neutral-600 gap-3">
+        <RotateCcw className="w-12 h-12 opacity-20" />
+        <p className="text-sm font-medium">No inventory logs found yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {logs.map(log => (
+        <div key={log._id} className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 flex items-center justify-between group">
+          <div className="flex items-center gap-4">
+             <div className={`w-10 h-10 rounded-full flex items-center justify-center border font-bold text-xs ${
+                log.type === 'restock' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                log.type === 'deduction' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                'bg-blue-500/10 text-blue-400 border-blue-500/20'
+             }`}>
+                {log.type === 'restock' ? '+' : log.type === 'deduction' ? '-' : '±'}
+             </div>
+             <div>
+                <div className="flex items-center gap-2">
+                   <span className="font-bold text-sm text-white">{log.inventoryId?.itemName || log.skuCode}</span>
+                   <span className="text-[10px] font-black uppercase text-neutral-500 tracking-wider">({log.skuCode})</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
+                   <span className="font-medium text-neutral-400">{log.action || 'Stock update'}</span>
+                   <span>•</span>
+                   <span>{new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+             </div>
+          </div>
+          <div className="text-right">
+             <div className={`text-sm font-black ${log.type === 'restock' ? 'text-emerald-400' : 'text-red-400'}`}>
+                {log.type === 'restock' ? '+' : '-'}{log.quantity}
+             </div>
+             <div className="text-[10px] font-bold text-neutral-600 uppercase mt-0.5">
+                {log.previousStock} → {log.newStock}
+             </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RecipeView({ ingredients, menuItems }) {
 
   const ingMap = Object.fromEntries(ingredients.map(i => [i.id, i]));
@@ -206,15 +254,20 @@ function RecipeView({ ingredients, menuItems }) {
 // ─── Main Inventory Modal ──────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 export default function InventoryModal({ onClose }) {
-  const { ingredients, restockIngredient, updateIngredient, resetInventory, fetchInventory, isLoading } = useInventoryStore();
+  const { ingredients, logs, restockIngredient, updateIngredient, resetInventory, fetchInventory, fetchLogs, isLoading } = useInventoryStore();
   const { menuItems } = useMenuStore();
 
-  // Refresh from DB every time the modal is opened
-  useEffect(() => { fetchInventory(); }, []);
+  useEffect(() => { 
+    fetchInventory(); 
+  }, []);
 
-  const [tab, setTab]         = useState('stock');   // 'stock' | 'recipes'
+  const [tab, setTab]         = useState('stock');   // 'stock' | 'logs' | 'recipes'
   const [search, setSearch]   = useState('');
   const [filter, setFilter]   = useState('all');     // 'all' | 'low' | 'out'
+
+  useEffect(() => {
+    if (tab === 'logs') fetchLogs();
+  }, [tab]);
 
   const filtered = useMemo(() => {
     return ingredients
@@ -263,12 +316,12 @@ export default function InventoryModal({ onClose }) {
 
             {/* Tab switcher */}
             <div className="flex bg-neutral-900 border border-neutral-800 rounded-xl p-1 gap-1">
-              {[['stock', 'Stock'], ['recipes', 'Recipes']].map(([id, label]) => (
+              {[['stock', 'Stock'], ['logs', 'History'], ['recipes', 'Recipes']].map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => setTab(id)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                    tab === id ? 'bg-violet-500 text-white shadow-[0_0_12px_rgba(139,92,246,0.3)]' : 'text-neutral-400 hover:text-white'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
+                    tab === id ? 'bg-violet-500 text-white shadow-[0_0_12px_rgba(139,92,246,0.3)]' : 'text-neutral-500 hover:text-white'
                   }`}
                 >
                   {label}
@@ -349,11 +402,13 @@ export default function InventoryModal({ onClose }) {
                 />
               ))
             )
+          ) : tab === 'logs' ? (
+            <LogsView logs={logs} />
           ) : (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-neutral-400 text-xs font-semibold uppercase tracking-widest mb-3">
-                <FlaskConical size={13} />
-                Recipe & Yield Overview
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-neutral-400 text-[10px] font-black uppercase tracking-[0.2em] mb-3">
+                <FlaskConical size={14} className="text-violet-400" />
+                Recipe & Yield Models
               </div>
               <RecipeView ingredients={ingredients} menuItems={menuItems} />
             </div>

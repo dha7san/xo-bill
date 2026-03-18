@@ -85,7 +85,8 @@ function buildSeedPayload() {
 
 // ─── Zustand Store ──────────────────────────────────────────────────────────
 const useInventoryStore = create((set, get) => ({
-  ingredients: DEFAULT_INGREDIENTS, // optimistic default, replaced on fetch
+  ingredients: DEFAULT_INGREDIENTS,
+  logs: [],
   isLoading: false,
   error: null,
 
@@ -107,6 +108,15 @@ const useInventoryStore = create((set, get) => ({
       console.warn('[Inventory] fetch failed, using local defaults:', err.message);
       set({ isLoading: false, error: err.message });
       // Keep using DEFAULT_INGREDIENTS as fallback
+    }
+  },
+
+  fetchLogs: async (params = {}) => {
+    try {
+      const logs = await inventoryService.getLogs(params);
+      set({ logs });
+    } catch (err) {
+      console.error('[Inventory] fetchLogs failed:', err);
     }
   },
 

@@ -82,6 +82,12 @@ const getAlerts = asyncHandler(async (req, res) => {
   res.json(alerts);
 });
 
+// GET /api/inventory/logs — get history of stock changes
+const getLogs = asyncHandler(async (req, res) => {
+  const logs = await inventoryService.getLogs(req.query);
+  res.json(logs);
+});
+
 module.exports = {
   getInventory,
   createItem,
@@ -91,5 +97,6 @@ module.exports = {
   updateMinStockBySku,
   bulkDeduct,
   seed,
-  getAlerts
+  getAlerts,
+  getLogs
 };

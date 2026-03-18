@@ -10,8 +10,9 @@ router.use(authMiddleware);
 router.get('/',    inventoryController.getInventory);
 router.post('/',   validate(schemas.createInventoryItem), inventoryController.createItem);
 
-// Low-stock alerts
+// Low-stock alerts & Logs
 router.get('/alerts', inventoryController.getAlerts);
+router.get('/logs',   inventoryController.getLogs);
 
 // Bulk deduct (called when order is placed)
 router.post('/deduct', inventoryController.bulkDeduct);
