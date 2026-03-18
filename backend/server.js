@@ -5,8 +5,11 @@ const cors         = require('cors');
 const morgan       = require('morgan');
 const helmet       = require('helmet');
 const compression  = require('compression');
-const connectDB    = require('./src/config/db');
-const logger       = require('./src/shared/utils/logger');
+const mongoSanitize = require('express-mongo-sanitize');
+const os            = require('os');
+const mongoose      = require('mongoose');
+const connectDB     = require('./src/config/db');
+const logger        = require('./src/shared/utils/logger');
 
 // POS Application Middlewares
 const { apiLimiter, authLimiter } = require('./src/shared/middleware/rateLimit.middleware');
@@ -29,17 +32,23 @@ initSocketServer(server).then(socketIo => {
 connectDB();
 
 // 3. Global Security & Utility Middlewares
+morgan.token('id', (req) => req.id); // Define token for logs
+
 app.use(helmet({ contentSecurityPolicy: false })); // Basic security
 app.use(compression());                            // Gzip compression
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
-app.use(express.json());                           // Payload parsing
-app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } })); // Link morgan to winston
 
-// Request Tracking
+// Request Tracking (Unique ID for every call — must be BEFORE morgan)
 app.use((req, res, next) => {
-  req.requestId = require('uuid').v4(); // Generate unique request ID
+  req.id = require('uuid').v4(); 
   next();
 });
+
+app.use(express.json({ limit: '10mb' }));  // Limit payload size for security
+app.use(mongoSanitize());                     // Prevent NoSQL Injection
+app.use(morgan('[:id] :remote-addr :method :url :status :response-time ms - :res[content-length]', {
+  stream: { write: (msg) => logger.info(msg.trim()) }
+})); 
 
 // 4. Rate Limiting
 app.use('/api', apiLimiter); // Standard rate limit for all API routes
@@ -54,11 +63,28 @@ app.use('/api/v1', v1Routes);
 app.use('/api', v1Routes);
 
 // Health check
+// Enhanced Health Check & Monitoring
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    process: {
+      uptime: Math.floor(process.uptime()),
+      pid: process.pid,
+      memory: process.memoryUsage(),
+    },
+    system: {
+      platform: process.platform,
+      arch: process.arch,
+      node: process.version,
+      cpus: os.cpus().length,
+      freeMem: os.freemem(),
+      totalMem: os.totalmem(),
+      loadAvg: os.loadavg(),
+    },
+    database: {
+      state: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    }
   });
 });
 
