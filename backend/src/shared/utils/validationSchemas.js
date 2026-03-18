@@ -6,13 +6,18 @@ const Joi = require('joi');
 const schemas = {
   // 1. Auth Schemas
   login: Joi.object({
-    email: Joi.string().email().required(),
-    password: Joi.string().min(6).required(),
-  }),
+    email: Joi.string().email().optional(),
+    password: Joi.string().min(4).optional(),
+    pin: Joi.string().length(4).pattern(/^[0-9]+$/).optional(),
+  }).xor('email', 'pin')
+    .with('email', 'password'),
+
   register: Joi.object({
-    name: Joi.string().min(2).required(),
+    firstName: Joi.string().min(1).required(),
+    lastName: Joi.string().min(1).required(),
     email: Joi.string().email().required(),
-    password: Joi.string().min(6).required(),
+    password: Joi.string().min(4).required(),
+    pin: Joi.string().length(4).pattern(/^[0-9]+$/).required(),
   }),
 
   // 2. Inventory Schemas

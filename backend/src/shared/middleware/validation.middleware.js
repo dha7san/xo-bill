@@ -14,6 +14,7 @@ const validate = (schema, property = 'body') => {
     });
 
     if (error) {
+      console.warn('Validation Failed:', error.details);
       const message = error.details.map(d => d.message).join(', ');
       return next(new AppError(`Validation Input Error: ${message}`, 400));
     }

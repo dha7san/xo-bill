@@ -28,6 +28,5 @@ const OrderSchema = new mongoose.Schema({
 
 // Index for fast daily report queries
 OrderSchema.index({ storeId: 1, createdAt: -1 });
-OrderSchema.index({ orderNumber: 1 });
 
 module.exports = mongoose.model('Order', OrderSchema);

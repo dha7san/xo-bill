@@ -8,7 +8,7 @@ const compression  = require('compression');
 const connectDB    = require('./src/config/db');
 const logger       = require('./src/shared/utils/logger');
 
-// Middleware
+// POS Application Middlewares
 const { apiLimiter, authLimiter } = require('./src/shared/middleware/rateLimit.middleware');
 const { errorHandler, AppError } = require('./src/shared/middleware/errorHandler');
 const { initSocketServer }       = require('./src/shared/ws/socketServer');
@@ -63,7 +63,7 @@ app.get('/health', (req, res) => {
 });
 
 // Case: Unknown route
-app.all('*', (req, res, next) => {
+app.use((req, res, next) => {
   next(new AppError(`The route ${req.originalUrl} does not exist on this server.`, 404));
 });
 

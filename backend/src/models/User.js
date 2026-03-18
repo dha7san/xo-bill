@@ -26,7 +26,6 @@ userSchema.virtual('fullName').get(function() {
 });
 
 // Index for login performance
-userSchema.index({ email: 1 });
 userSchema.index({ pin: 1, isActive: 1 });
 
 module.exports = mongoose.model('User', userSchema);
