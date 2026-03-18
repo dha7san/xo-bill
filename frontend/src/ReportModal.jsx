@@ -141,8 +141,14 @@ export default function ReportModal({ completedOrders, onClose }) {
     // Payment breakdown
     const payBreakdown = { Cash: 0, UPI: 0, Card: 0 };
     orders.forEach(o => {
-      const m = o.paymentMethod || 'Cash';
-      payBreakdown[m] = (payBreakdown[m] || 0) + o.totalAmount;
+      if (o.payments && o.payments.length > 0) {
+        o.payments.forEach(p => {
+          payBreakdown[p.method] = (payBreakdown[p.method] || 0) + p.amount;
+        });
+      } else {
+        const m = o.paymentMethod || 'Cash';
+        payBreakdown[m] = (payBreakdown[m] || 0) + o.totalAmount;
+      }
     });
 
     const hourly = buildHourly(orders);

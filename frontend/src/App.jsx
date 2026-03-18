@@ -98,52 +98,141 @@ async function printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paym
 }
 
 // ─── Modals ───
-function UpiQrModal({ amount, onConfirm, onCancel }) {
-  const qrUrl = buildQrUrl(amount.toFixed(2));
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-[fadeIn_0.2s_ease]">
-      <div className="relative bg-neutral-900 border border-neutral-700 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-800">
-          <div className="flex items-center gap-2 font-bold text-white"><Smartphone size={20} className="text-orange-400" />Scan to Pay</div>
-          <button onClick={onCancel} className="text-neutral-500 hover:text-white transition-colors"><X size={20} /></button>
-        </div>
-        <div className="flex flex-col items-center px-6 py-8 gap-5">
-          <div className="p-3 bg-white rounded-2xl shadow-xl"><img src={qrUrl} alt="QR" width={220} height={220} /></div>
-          <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl px-6 py-3 w-full text-center">
-            <p className="text-xs text-orange-400 font-bold uppercase tracking-widest mb-1">Amount Due</p>
-            <p className="text-3xl font-black text-white">₹{amount.toFixed(2)}</p>
-          </div>
-        </div>
-        <div className="px-6 pb-6 flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-3 rounded-xl border border-neutral-700 text-neutral-400 font-semibold">Cancel</button>
-          <button onClick={onConfirm} className="flex-1 py-3 rounded-xl bg-orange-500 text-white font-bold shadow-lg shadow-orange-500/20">Payment Received</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+function CheckoutModal({ total, onConfirm, onCancel }) {
+  const [payments, setPayments] = useState([]);
+  const [currentAmount, setCurrentAmount] = useState('');
+  const [currentMethod, setCurrentMethod] = useState('Cash');
+  const [showQR, setShowQR] = useState(false);
 
-function CardModal({ amount, onConfirm, onCancel }) {
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const remaining = Math.max(0, total - totalPaid);
+
+  useEffect(() => {
+    setCurrentAmount(remaining.toFixed(2));
+  }, [remaining]);
+
+  const addPayment = () => {
+    const val = parseFloat(currentAmount);
+    if (isNaN(val) || val <= 0) return;
+    if (val > remaining + 0.01) return alert('Amount exceeds remaining balance');
+    
+    setPayments([...payments, { method: currentMethod, amount: val, id: Date.now() }]);
+    if (currentMethod === 'UPI') setShowQR(false);
+  };
+
+  const removePayment = (id) => setPayments(payments.filter(p => p.id !== id));
+
+  const handleFinalize = () => {
+    if (Math.abs(totalPaid - total) > 0.1) return alert('Please pay the full amount before finalizing');
+    onConfirm(payments);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-[fadeIn_0.2s_ease]">
-      <div className="relative bg-neutral-900 border border-neutral-700 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-800">
-          <div className="flex items-center gap-2 font-bold text-white"><CreditCard size={20} className="text-indigo-400" />Card Payment</div>
-          <button onClick={onCancel} className="text-neutral-500 hover:text-white transition-colors"><X size={20} /></button>
-        </div>
-        <div className="flex flex-col items-center px-6 py-8 gap-6">
-          <div className="w-48 h-28 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 shadow-xl flex flex-col justify-between p-4">
-             <div className="w-8 h-6 rounded bg-yellow-400/80"></div>
-             <div className="text-white/60 text-xs tracking-widest font-mono">•••• •••• •••• ••••</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-[fadeIn_0.2s_ease]">
+      <div className="relative bg-neutral-900 border border-neutral-800 rounded-[32px] shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden max-h-[90vh]">
+        <div className="flex items-center justify-between px-8 py-6 border-b border-neutral-800">
+          <div>
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+               <Banknote className="text-emerald-400" /> Checkout & Payment
+            </h2>
+            <p className="text-xs text-neutral-500 font-bold uppercase tracking-widest mt-0.5">Split payments supported</p>
           </div>
-          <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-2xl px-6 py-3 w-full text-center">
-            <p className="text-xs text-indigo-400 font-bold uppercase tracking-widest mb-1">Charge Amount</p>
-            <p className="text-3xl font-black text-white">₹{amount.toFixed(2)}</p>
+          <button onClick={onCancel} className="p-2 hover:bg-neutral-800 rounded-full text-neutral-500 transition-colors"><X size={24} /></button>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left: Input */}
+          <div className="flex-1 p-8 border-r border-neutral-800 bg-neutral-950/30">
+             <div className="mb-8 p-6 bg-neutral-900/50 border border-neutral-800 rounded-3xl text-center">
+                <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Total Bill</span>
+                <div className="text-4xl font-black text-white mt-1">₹{total.toFixed(2)}</div>
+             </div>
+
+             <div className="space-y-6">
+                <div className="space-y-3">
+                   <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest ml-1">Payment Method</label>
+                   <div className="grid grid-cols-3 gap-2">
+                      {['Cash', 'UPI', 'Card'].map(m => (
+                        <button key={m} onClick={() => setCurrentMethod(m)} className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${currentMethod === m ? 'bg-sky-500 text-white border-sky-500 shadow-lg shadow-sky-500/20' : 'bg-neutral-900 text-neutral-500 border-neutral-800'}`}>
+                           {m}
+                        </button>
+                      ))}
+                   </div>
+                </div>
+
+                <div className="space-y-3">
+                   <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest ml-1">Amount to Pay</label>
+                   <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 font-bold">₹</span>
+                      <input 
+                        type="number" value={currentAmount} onChange={e => setCurrentAmount(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-2xl pl-10 pr-4 py-4 text-white font-black text-xl outline-none focus:border-sky-500"
+                        onFocus={(e) => e.target.select()}
+                      />
+                   </div>
+                </div>
+
+                {currentMethod === 'UPI' && !showQR && (
+                  <button onClick={() => setShowQR(true)} className="w-full py-3 bg-orange-500/10 text-orange-400 border border-orange-500/30 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+                     <QrCode size={16} /> Show QR for this amount
+                  </button>
+                )}
+
+                {showQR && (
+                  <div className="flex flex-col items-center gap-3 p-4 bg-white rounded-3xl animate-[fadeIn_0.3s_ease]">
+                    <img src={buildQrUrl(parseFloat(currentAmount || 0))} alt="QR" className="w-32 h-32" />
+                    <button onClick={() => setShowQR(false)} className="text-[10px] font-black text-neutral-400 uppercase">Hide QR</button>
+                  </div>
+                )}
+
+                <button 
+                  onClick={addPayment}
+                  disabled={remaining <= 0}
+                  className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg shadow-emerald-500/20 active:scale-95 disabled:grayscale disabled:opacity-30 transition-all font-sans"
+                >
+                  <Plus size={20} strokeWidth={3} /> Add Payment
+                </button>
+             </div>
+          </div>
+
+          {/* Right: Payment List */}
+          <div className="w-64 bg-neutral-900/20 p-6 flex flex-col">
+             <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-4">Paid Breakdown</h3>
+             <div className="flex-1 space-y-3 overflow-y-auto thin-scrollbar">
+                {payments.map(p => (
+                  <div key={p.id} className="flex items-center justify-between p-3 bg-neutral-900 border border-neutral-800 rounded-2xl animate-[fadeIn_0.2s_ease]">
+                    <div>
+                      <div className="text-[10px] font-black text-white uppercase">{p.method}</div>
+                      <div className="text-sm font-bold text-sky-400">₹{p.amount.toFixed(2)}</div>
+                    </div>
+                    <button onClick={() => removePayment(p.id)} className="p-1.5 text-neutral-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"><X size={14} /></button>
+                  </div>
+                ))}
+                {payments.length === 0 && (
+                  <div className="h-full flex flex-col items-center justify-center text-neutral-700 gap-2 opacity-50 italic text-xs text-center border-2 border-dashed border-neutral-800 rounded-3xl">
+                     No payments<br/>added yet
+                  </div>
+                )}
+             </div>
+
+             <div className="pt-6 border-t border-neutral-800 space-y-2">
+                <div className="flex justify-between text-[10px] font-black text-neutral-500 uppercase"><span>Balanced</span><span>₹{totalPaid.toFixed(2)}</span></div>
+                <div className={`flex justify-between text-[10px] font-black uppercase ${remaining > 0 ? 'text-orange-400' : 'text-emerald-400'}`}>
+                   <span>Pending</span>
+                   <span>₹{remaining.toFixed(2)}</span>
+                </div>
+             </div>
           </div>
         </div>
-        <div className="px-6 pb-6 flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-3 rounded-xl border border-neutral-700 text-neutral-400 font-semibold">Cancel</button>
-          <button onClick={onConfirm} className="flex-1 py-3 rounded-xl bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-500/20">Card Approved</button>
+
+        <div className="p-6 bg-neutral-950/50 border-t border-neutral-800">
+           <button 
+             onClick={handleFinalize}
+             disabled={Math.abs(remaining) > 0.1 || payments.length === 0}
+             className="w-full py-4 bg-sky-500 text-white font-black rounded-2xl uppercase tracking-tighter text-lg shadow-xl shadow-sky-500/20 disabled:grayscale disabled:opacity-30 active:scale-95 transition-all"
+           >
+             Finalize Order
+           </button>
         </div>
       </div>
     </div>
@@ -173,8 +262,7 @@ export default function App() {
   const [searchQuery, setSearchQuery]         = useState('');
   const [isOnline, setIsOnline]               = useState(navigator.onLine);
   const [paymentMethod, setPaymentMethod]     = useState('Cash');
-  const [showUpiModal, setShowUpiModal]       = useState(false);
-  const [showCardModal, setShowCardModal]     = useState(false);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [showReport, setShowReport]           = useState(false);
   const [showInventory, setShowInventory]     = useState(false);
   const [showAdmin, setShowAdmin]             = useState(false);
@@ -205,7 +293,7 @@ export default function App() {
         if (e.key === 'Escape') { setSearchQuery(''); document.activeElement.blur(); }
         return;
       }
-      if (e.key === 'F1') { e.preventDefault(); if (cart.length > 0) finaliseOrder(); }
+      if (e.key === 'F1') { e.preventDefault(); if (cart.length > 0) setShowCheckoutModal(true); }
       if (e.key === 'F2') { e.preventDefault(); setPaymentMethod('Cash'); }
       if (e.key === 'F3') { e.preventDefault(); setPaymentMethod('UPI'); }
       if (e.key === '/') { e.preventDefault(); document.getElementById('pos-search-input')?.focus(); }
@@ -232,15 +320,19 @@ export default function App() {
     return matchesCat && matchesSearch;
   });
 
-  const finaliseOrder = useCallback(async (withPrint = false) => {
+  const finaliseOrder = useCallback(async (payments = [], withPrint = false) => {
     const orderId = uuidv4();
     const payload = {
       orderNumber: orderId,
       tableNumber,
       items: cart.map(i => ({ name: i.name, qty: i.qty, price: i.price || i.basePrice, menuItemId: i._id || i.id })),
+      subTotal,
+      gst,
       totalAmount: grandTotal,
       orderType: 'Dine-In',
-      paymentMethod,
+      payments,
+      paymentMethod: payments.length > 1 ? 'Split' : (payments[0]?.method || paymentMethod),
+      paymentStatus: 'paid',
       timestamp: new Date().toISOString(),
       storeId: CONFIG.storeId || 'default',
     };
@@ -254,7 +346,7 @@ export default function App() {
       } catch (err) {
         console.error('Print trigger failed:', err);
         // Fallback to local if backend is unreachable or fails
-        await printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paymentMethod });
+        await printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paymentMethod: payload.paymentMethod });
       }
     }
 
@@ -281,8 +373,16 @@ export default function App() {
       {showInventory && <InventoryModal onClose={() => setShowInventory(false)} />}
       {showReport && <ReportModal completedOrders={completedOrders} onClose={() => setShowReport(false)} />}
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
-      {showUpiModal && <UpiQrModal amount={grandTotal} onConfirm={async () => { setShowUpiModal(false); await finaliseOrder(); }} onCancel={() => setShowUpiModal(false)} />}
-      {showCardModal && <CardModal amount={grandTotal} onConfirm={async () => { setShowCardModal(false); await finaliseOrder(); }} onCancel={() => setShowCardModal(false)} />}
+      {showCheckoutModal && (
+        <CheckoutModal 
+          total={grandTotal} 
+          onConfirm={async (payments) => {
+            setShowCheckoutModal(false);
+            await finaliseOrder(payments, true);
+          }} 
+          onCancel={() => setShowCheckoutModal(false)} 
+        />
+      )}
       {toast && <SuccessToast message={toast} onDone={() => setToast(null)} />}
 
       <div className="flex flex-col h-screen overflow-hidden bg-neutral-950 text-neutral-100 font-sans select-none">
@@ -415,12 +515,15 @@ export default function App() {
              })}
            </div>
 
-           <div className="flex items-center gap-3">
-             <button onClick={() => handleCharge(true)} disabled={cart.length === 0} className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-sky-400 disabled:opacity-30"><Printer size={24} /></button>
-             <button onClick={() => handleCharge(false)} disabled={cart.length === 0} className="h-16 px-12 bg-sky-500 text-white rounded-2xl font-black text-xl uppercase tracking-tighter shadow-xl shadow-sky-500/20 active:scale-95 disabled:grayscale disabled:opacity-50 transition-all flex items-center gap-4">
-               <Wallet size={24} strokeWidth={3} />Charge Bill
-             </button>
-           </div>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setShowCheckoutModal(true)} 
+                disabled={cart.length === 0} 
+                className="h-16 px-12 bg-sky-500 text-white rounded-2xl font-black text-xl uppercase tracking-tighter shadow-xl shadow-sky-500/20 active:scale-95 disabled:grayscale disabled:opacity-50 transition-all flex items-center gap-4"
+              >
+                <Wallet size={24} strokeWidth={3} /> Charge Bill
+              </button>
+            </div>
         </div>
       </div>
 
