@@ -16,9 +16,11 @@ const PaymentSchema = new mongoose.Schema({
 
 const OrderSchema = new mongoose.Schema({
   orderNumber:   { type: String, required: true, unique: true },
-  storeId:       { type: String, default: 'default' },
+  storeId:       { type: String, required: true, index: true }, // The Company ID
+  branchId:      { type: String, required: true, index: true }, // The Location ID
   terminalId:    { type: String, default: 'terminal-1' },
   tableNumber:   { type: mongoose.Schema.Types.Mixed, default: 1 },
+  isKOT:         { type: Boolean, default: true }, // Kitchen Order Ticket?
   items:         { type: [OrderItemSchema], required: true },
   subTotal:      { type: Number, default: 0 },
   gst:           { type: Number, default: 0 },
@@ -30,6 +32,8 @@ const OrderSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ['unpaid', 'paid', 'refunded'], default: 'paid' },
   orderType:     { type: String, enum: ['Dine-In', 'Takeaway', 'Delivery'], default: 'Dine-In' },
   status:        { type: String, enum: ['pending', 'completed', 'cancelled'], default: 'completed' },
+  kdsStatus:     { type: String, enum: ['pending', 'cooking', 'prepared', 'served'], default: 'pending' },
+  preparedAt:    { type: Date },
   syncedFrom:    { type: String, default: 'online' },
   notes:         { type: String },
 }, { timestamps: true });

@@ -22,6 +22,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import { printManager } from './services/printManager';
+import KitchenView from './KitchenView';
 
 // ─── Config (from environment variables via config.js) ────────────────────
 const UPI_ID    = CONFIG.upiId;
@@ -266,6 +267,7 @@ export default function App() {
   const [showReport, setShowReport]           = useState(false);
   const [showInventory, setShowInventory]     = useState(false);
   const [showAdmin, setShowAdmin]             = useState(false);
+  const [showKds, setShowKds]                 = useState(false);
   const [toast, setToast]                     = useState(null);
 
   const { isAuthenticated, isLoading: isAuthLoading, init: initAuth, logout } = useAuthStore();
@@ -335,6 +337,7 @@ export default function App() {
       paymentStatus: 'paid',
       timestamp: new Date().toISOString(),
       storeId: CONFIG.storeId || 'default',
+      branchId: CONFIG.branchId || 'main',
     };
 
     recordOrder(payload);
@@ -373,6 +376,7 @@ export default function App() {
       {showInventory && <InventoryModal onClose={() => setShowInventory(false)} />}
       {showReport && <ReportModal completedOrders={completedOrders} onClose={() => setShowReport(false)} />}
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+      {showKds && <KitchenView onClose={() => setShowKds(false)} />}
       {showCheckoutModal && (
         <CheckoutModal 
           total={grandTotal} 
@@ -406,6 +410,10 @@ export default function App() {
             </div>
             
             <button onClick={() => requireManager(() => setShowInventory(true))} className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white transition-all"><Package size={20} /></button>
+            <button onClick={() => setShowKds(true)} className="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 hover:bg-orange-500 hover:text-white transition-all flex items-center gap-2 px-4 shadow-lg shadow-orange-500/10">
+               <ChefHat size={18} strokeWidth={2.5} />
+               <span className="text-[10px] font-black uppercase tracking-widest hidden lg:inline">Kitchen</span>
+            </button>
             <button onClick={() => requireManager(() => setShowReport(true))} className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white transition-all"><BarChart2 size={20} /></button>
             <button onClick={() => requireManager(() => setShowAdmin(true))} className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white transition-all"><Settings size={20} /></button>
             <button onClick={lockCashier} className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white transition-all"><Lock size={20} /></button>

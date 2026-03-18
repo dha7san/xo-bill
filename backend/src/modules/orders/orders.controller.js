@@ -30,4 +30,11 @@ const listOrders = asyncHandler(async (req, res) => {
   res.json(orders);
 });
 
-module.exports = { createOrder, syncBatch, getOrder, listOrders };
+const updateKdsStatus = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { kdsStatus } = req.body;
+  const order = await orderService.updateKdsStatus(id, kdsStatus, withIo(req));
+  res.json(order);
+});
+
+module.exports = { createOrder, syncBatch, getOrder, listOrders, updateKdsStatus };

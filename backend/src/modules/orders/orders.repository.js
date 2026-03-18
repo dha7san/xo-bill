@@ -13,14 +13,19 @@ class OrderRepository {
     return Order.findOne({ orderNumber });
   }
 
-  async findByStore(storeId, { from, to, limit = 100 } = {}) {
+  async findByStore(storeId, { from, to, branchId, kdsStatus, limit = 100 } = {}) {
     const q = { storeId };
+    if (branchId) q.branchId = branchId;
+    if (kdsStatus) {
+      const statuses = kdsStatus.split(',');
+      q.kdsStatus = statuses.length > 1 ? { $in: statuses } : statuses[0];
+    }
     if (from || to) {
       q.createdAt = {};
       if (from) q.createdAt.$gte = new Date(from);
       if (to)   q.createdAt.$lte = new Date(to);
     }
-    return Order.find(q).sort({ createdAt: -1 }).limit(limit);
+    return Order.find(q).sort({ createdAt: -1 }).limit(Number(limit));
   }
 
   async dailyRevenue(storeId, date = new Date()) {

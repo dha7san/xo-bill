@@ -6,8 +6,8 @@ const inventoryService = require('../inventory/inventory.service');
 
 class OrderService {
   async createOrder(dto, { io } = {}) {
-    const { items, totalAmount, tableNumber, paymentMethod,
-            orderType, storeId, terminalId, orderNumber, timestamp } = dto;
+    const { items, totalAmount, tableNumber, paymentMethod, payments,
+            orderType, storeId, branchId, terminalId, orderNumber, timestamp } = dto;
 
     // Idempotency: skip if already synced
     const existing = await orderRepo.findByOrderNumber(orderNumber);
@@ -18,22 +18,25 @@ class OrderService {
 
     const order = await orderRepo.create({
       orderNumber,
-      storeId:       storeId ?? 'default',
-      terminalId:    terminalId ?? 'terminal-1',
+      storeId:       storeId || 'default',
+      branchId:      branchId || 'main',
+      terminalId:    terminalId || 'terminal-1',
       tableNumber,
       items,
       subTotal,
       gst,
       totalAmount,
+      payments:      payments || [],
       paymentMethod,
       orderType,
       status:     'completed',
-      syncedFrom: dto.syncedFrom ?? 'online',
+      kdsStatus:  'pending',
+      syncedFrom: dto.syncedFrom || 'online',
       createdAt:  timestamp ? new Date(timestamp) : undefined,
     });
 
     // Deduce Inventory (Automatically lookup recipes)
-    const stockUpdates = await inventoryService.deductByOrder(items).catch(err => {
+    const stockUpdates = await inventoryService.deductByOrder(items, orderNumber).catch(err => {
       console.error('Inventory deduction failed:', err.message);
       return [];
     });
@@ -45,19 +48,16 @@ class OrderService {
       });
     }
 
-
-    // Publish to event bus (non-blocking)
-    eventBus.publish(CHANNELS.ORDER_CREATED, order.toObject()).catch(() => {});
-
     // Broadcast via WebSocket if io is available
     if (io) {
       io.to(`store:${order.storeId}`).emit('order.created', order.toObject());
+      io.to(`branch:${order.branchId}`).emit('kds.new_order', order.toObject());
     }
 
     return { order, duplicate: false };
   }
 
-  // Offline batch sync — processes multiple orders, returns summary
+  // Offline batch sync
   async syncBatch(orders, { io } = {}) {
     const results = await Promise.allSettled(
       orders.map(o => this.createOrder(o, { io }))
@@ -66,7 +66,6 @@ class OrderService {
       synced:     results.filter(r => r.status === 'fulfilled' && !r.value?.duplicate).length,
       duplicates: results.filter(r => r.status === 'fulfilled' && r.value?.duplicate).length,
       failed:     results.filter(r => r.status === 'rejected').length,
-      errors:     results.filter(r => r.status === 'rejected').map(r => r.reason?.message),
     };
   }
 
@@ -78,6 +77,21 @@ class OrderService {
 
   async listOrders(storeId, query) {
     return orderRepo.findByStore(storeId, query);
+  }
+
+  async updateKdsStatus(id, kdsStatus, { io } = {}) {
+    const order = await orderRepo.findById(id);
+    if (!order) throw new Error('Order not found');
+
+    order.kdsStatus = kdsStatus;
+    if (kdsStatus === 'prepared') order.preparedAt = new Date();
+    await order.save();
+
+    if (io) {
+      io.to(`branch:${order.branchId}`).emit('kds.status_updated', { id, kdsStatus });
+      io.to(`store:${order.storeId}`).emit('order.updated', { id, kdsStatus });
+    }
+    return order;
   }
 }
 
