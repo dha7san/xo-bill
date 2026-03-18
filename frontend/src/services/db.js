@@ -4,11 +4,12 @@
  */
 
 const DB_NAME = 'xopos_offline_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Increment version for new stores
 
 export const STORES = {
   ORDERS_QUEUE: 'orders_queue',
-  SYNC_META: 'sync_metadata'
+  SYNC_META: 'sync_metadata',
+  CACHE: 'app_cache' // For menu, categories, settings
 };
 
 class LocalDB {
@@ -34,6 +35,11 @@ class LocalDB {
         if (!db.objectStoreNames.contains(STORES.SYNC_META)) {
           db.createObjectStore(STORES.SYNC_META, { keyPath: 'key' });
         }
+
+        // Cache for menu and categories
+        if (!db.objectStoreNames.contains(STORES.CACHE)) {
+          db.createObjectStore(STORES.CACHE, { keyPath: 'key' });
+        }
       };
 
       request.onsuccess = () => {
@@ -50,10 +56,17 @@ class LocalDB {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, mode);
       const store = transaction.objectStore(storeName);
-      const request = callback(store);
-
-      transaction.oncomplete = () => resolve(request.result);
-      transaction.onerror = () => reject(transaction.error);
+      
+      try {
+        const request = callback(store);
+        transaction.oncomplete = () => resolve(request ? request.result : null);
+        transaction.onerror = (e) => {
+          console.error(`IDB Error in ${storeName}:`, e);
+          reject(transaction.error);
+        };
+      } catch (err) {
+        reject(err);
+      }
     });
   }
 
@@ -65,7 +78,8 @@ class LocalDB {
         ...order,
         status: 'pending',
         timestamp: new Date().toISOString(),
-        retries: 0
+        retries: 0,
+        nextRetry: Date.now() // Ready for sync immediately
       });
     });
   }
@@ -82,12 +96,30 @@ class LocalDB {
     });
   }
 
-  async updateOrderRetry(id, retryCount) {
+  async updateOrderRetry(id, retryCount, nextRetryMs) {
     const order = await this.execute(STORES.ORDERS_QUEUE, 'readonly', (store) => store.get(id));
     if (order) {
       order.retries = retryCount;
+      order.nextRetry = nextRetryMs;
       return this.execute(STORES.ORDERS_QUEUE, 'readwrite', (store) => store.put(order));
     }
+  }
+
+  // --- Cache Helpers ---
+
+  async setCache(key, data) {
+    return this.execute(STORES.CACHE, 'readwrite', (store) => {
+      return store.put({ key, data, updated_at: new Date().toISOString() });
+    });
+  }
+
+  async getCache(key) {
+    const result = await this.execute(STORES.CACHE, 'readonly', (store) => store.get(key));
+    return result ? result.data : null;
+  }
+
+  async clearCache(key) {
+    return this.execute(STORES.CACHE, 'readwrite', (store) => store.delete(key));
   }
 }
 

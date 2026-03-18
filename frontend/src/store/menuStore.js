@@ -1,25 +1,48 @@
 import { create } from 'zustand';
 import { menuService } from '../services/menuService';
+import { syncManager } from '../services/syncManager';
 
 const useMenuStore = create((set, get) => ({
   categories: [],
   menuItems: [],
   isLoading: false,
+  isFromCache: false,
   error: null,
 
   fetchMenu: async () => {
     set({ isLoading: true, error: null });
+    
+    // 1. Try Live API 首先 attempt live
     try {
       const [categories, menuItems] = await Promise.all([
         menuService.getCategories(),
         menuService.getMenuItems()
       ]);
-      set({ categories, menuItems, isLoading: false });
+      
+      // Update Cache immediately when fresh data arrives
+      syncManager.cacheMenuData(categories, menuItems);
+      
+      set({ categories, menuItems, isLoading: false, isFromCache: false });
     } catch (err) {
-      set({ error: err.message, isLoading: false });
+      console.warn('❌ API Fetch failed, attempting to serve from local cache...');
+      
+      // 2. Fallback to cache since offline
+      const cached = await syncManager.getCachedMenu();
+      if (cached) {
+         set({ 
+           categories: cached.categories, 
+           menuItems: cached.items, 
+           isLoading: false,
+           isFromCache: true 
+         });
+      } else {
+         set({ error: 'System is offline and no local data found.', isLoading: false });
+      }
     }
   },
 
+  // ... CRUD operations remain similar, but notice they'll fail during offline 
+  // (we could add offline CRUD queueing later if requested)
   // Categories
   addCategory: async (categoryData) => {
     const newCategory = await menuService.createCategory(categoryData);

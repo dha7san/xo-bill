@@ -280,7 +280,7 @@ export default function App() {
     requireManager, onManagerUnlock, onManagerCancel,
   } = useAppSecurity();
 
-  const { categories: apiCategories, menuItems: apiItems, fetchMenu, isLoading: isMenuLoading } = useMenuStore();
+  const { categories: apiCategories, menuItems: apiItems, fetchMenu, isLoading: isMenuLoading, isFromCache } = useMenuStore();
   const { ingredients, deductIngredients, syncStock, fetchInventory } = useInventoryStore();
   const lowStockCount = ingredients.filter(i => i.stock <= i.minStock).length;
 
@@ -306,7 +306,7 @@ export default function App() {
     });
 
     // 3. Online/Offline Detect
-    const up   = () => setIsOnline(true);
+    const up   = () => { setIsOnline(true); fetchMenu(); };
     const down = () => setIsOnline(false);
     window.addEventListener('online',  up);
     window.addEventListener('offline', down);
@@ -460,8 +460,10 @@ export default function App() {
             {/* Status Indicators */}
             <div className="flex items-center gap-3 px-3 py-1.5 bg-neutral-900 border border-neutral-800 rounded-full">
                <div className="flex items-center gap-1.5" title={isOnline ? 'Internet Connected' : 'Internet Offline'}>
-                  <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-                  <span className="text-[10px] uppercase font-bold text-neutral-500">Net</span>
+                  <div className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                  <span className={`text-[10px] uppercase font-black ${isOnline ? 'text-neutral-500' : 'text-red-500'}`}>
+                    {isOnline ? 'Network' : 'Offline'}
+                  </span>
                </div>
                <div className="w-px h-3 bg-neutral-800" />
                <div className="flex items-center gap-1.5" title="Real-time Multi-device Sync">
@@ -538,20 +540,26 @@ export default function App() {
 
             {/* Category pills */}
             <div className="px-6 pt-5 pb-3 shrink-0 flex gap-3 overflow-x-auto no-scrollbar">
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className={`whitespace-nowrap px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
-                    activeCategory === cat
-                      ? 'bg-sky-500 text-white shadow-[0_0_18px_rgba(14,165,233,0.35)]'
-                      : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-white border border-neutral-800'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`whitespace-nowrap px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                      activeCategory === cat
+                        ? 'bg-sky-500 text-white shadow-[0_0_18px_rgba(14,165,233,0.35)]'
+                        : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-white border border-neutral-800'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                {isFromCache && (
+                  <div className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold animate-pulse">
+                     <WifiOff size={14} />
+                     Offline Catalog
+                  </div>
+                )}
+              </div>
 
             {/* Grid */}
             <div className="flex-1 px-6 pb-6 overflow-y-auto thin-scrollbar">
