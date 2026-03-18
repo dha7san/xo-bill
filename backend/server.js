@@ -7,13 +7,15 @@ const helmet = require('helmet');
 const connectDB = require('./src/config/db');
 
 // Modular Routes
-const authRoutes = require('./src/modules/auth/auth.routes');
+// Modular Routes
+const authRoutes = require('./src/routes/authRoutes');
+const menuRoutes = require('./src/modules/menu/menu.routes');
 const orderRoutes = require('./src/modules/orders/orders.routes');
+const inventoryRoutes = require('./src/modules/inventory/inventory.routes');
+const billingRoutes = require('./src/modules/billing/billing.routes');
+const paymentRoutes = require('./src/modules/payments/payments.routes');
 const printerRoutes = require('./src/modules/printer/printer.routes');
 const reportRoutes = require('./src/modules/reports/reports.routes');
-// Note: We'll migrate remaining legacy routes (menu, inventory) in next passes
-const menuRoutes = require('./src/routes/menuRoutes');
-const inventoryRoutes = require('./src/routes/inventoryRoutes');
 
 const { initSocketServer } = require('./src/shared/ws/socketServer');
 const { errorHandler } = require('./src/shared/middleware/errorHandler');
@@ -39,13 +41,14 @@ app.use(morgan('dev'));
 
 // Routing
 app.use('/api/auth', authRoutes);
+app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/inventory', inventoryRoutes);
 app.use('/api/print', printerRoutes);
 app.use('/api/reports', reportRoutes);
 
-// Keep legacy routes while refactoring
-app.use('/api/menu', menuRoutes);
-app.use('/api/inventory', inventoryRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -59,3 +62,4 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
+

@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X, Package, AlertTriangle, CheckCircle2, Plus,
-  RotateCcw, Search, ChevronDown, ChevronUp, FlaskConical
+  RotateCcw, Search, ChevronDown, ChevronUp, FlaskConical, Loader2
 } from 'lucide-react';
 import useInventoryStore, { RECIPES, DEFAULT_INGREDIENTS } from './store/inventoryStore';
+import useMenuStore from './store/menuStore';
 
 // ─── Status helpers ───────────────────────────────────────────────────────
 function getStatus(ing) {
@@ -152,28 +153,14 @@ function IngredientCard({ ingredient, onRestock, onUpdateMin }) {
 }
 
 // ─── Menu item recipe popup ────────────────────────────────────────────────
-function RecipeView({ ingredients }) {
-  const MENU = [
-    { id: 1,  name: 'Margherita Pizza'   },
-    { id: 2,  name: 'Pepperoni Pizza'    },
-    { id: 3,  name: 'Garlic Bread'       },
-    { id: 4,  name: 'Truffle Fries'      },
-    { id: 5,  name: 'Coke'               },
-    { id: 6,  name: 'Lemonade'           },
-    { id: 7,  name: 'Pasta Alfredo'      },
-    { id: 8,  name: 'Arrabbiata'         },
-    { id: 9,  name: 'Classic Burger'     },
-    { id: 10, name: 'Cheese Burger'      },
-    { id: 11, name: 'Vanilla Shake'      },
-    { id: 12, name: 'Chocolate Brownie'  },
-  ];
+function RecipeView({ ingredients, menuItems }) {
 
   const ingMap = Object.fromEntries(ingredients.map(i => [i.id, i]));
 
   return (
     <div className="space-y-3">
-      {MENU.map(item => {
-        const recipe = RECIPES[item.id] || [];
+      {menuItems.map(item => {
+        const recipe = RECIPES[item.name] || [];
         const canMake = recipe.every(({ id, qty }) => {
           const ing = ingMap[id];
           return ing && ing.stock >= qty;
@@ -219,7 +206,11 @@ function RecipeView({ ingredients }) {
 // ─── Main Inventory Modal ──────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 export default function InventoryModal({ onClose }) {
-  const { ingredients, restockIngredient, updateIngredient, resetInventory } = useInventoryStore();
+  const { ingredients, restockIngredient, updateIngredient, resetInventory, fetchInventory, isLoading } = useInventoryStore();
+  const { menuItems } = useMenuStore();
+
+  // Refresh from DB every time the modal is opened
+  useEffect(() => { fetchInventory(); }, []);
 
   const [tab, setTab]         = useState('stock');   // 'stock' | 'recipes'
   const [search, setSearch]   = useState('');
@@ -320,7 +311,7 @@ export default function InventoryModal({ onClose }) {
               </button>
             ))}
             <button
-              onClick={() => { if (confirm('Reset all ingredient stocks to default quantities?')) resetInventory(); }}
+              onClick={async () => { if (confirm('Reset all ingredient stocks to default quantities?')) { await resetInventory(); fetchInventory(); } }}
               className="flex items-center gap-1.5 text-neutral-500 hover:text-red-400 px-3 py-2 rounded-xl hover:bg-red-500/10 border border-neutral-800 text-sm font-medium transition-colors"
               title="Reset all stock to defaults"
             >
@@ -331,6 +322,16 @@ export default function InventoryModal({ onClose }) {
         )}
 
         {/* ── Scrollable body ── */}
+        {/* ── Loading overlay ── */}
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-950/70 rounded-3xl backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 size={32} className="text-violet-400 animate-spin" />
+              <p className="text-sm text-neutral-400 font-medium">Syncing inventory…</p>
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-2.5 thin-scrollbar">
           {tab === 'stock' ? (
             filtered.length === 0 ? (
@@ -354,7 +355,7 @@ export default function InventoryModal({ onClose }) {
                 <FlaskConical size={13} />
                 Recipe & Yield Overview
               </div>
-              <RecipeView ingredients={ingredients} />
+              <RecipeView ingredients={ingredients} menuItems={menuItems} />
             </div>
           )}
         </div>

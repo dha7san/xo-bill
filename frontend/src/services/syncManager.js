@@ -53,7 +53,7 @@ class SyncManager {
   }
 
   async syncOne(order) {
-    const token = sessionStorage.getItem('pos_access_token');
+    const token = localStorage.getItem('pos_token');
     
     try {
       const response = await axios.post(`${CONFIG.apiBaseUrl}/orders`, order.payload, {

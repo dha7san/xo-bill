@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import useCartStore from './store/cartStore';
-import useInventoryStore from './store/inventoryStore';
+import useInventoryStore, { RECIPES } from './store/inventoryStore';
+import { inventoryService } from './services/inventoryService';
 import ReportModal from './ReportModal';
 import InventoryModal from './InventoryModal';
 import { AppLockScreen, ManagerPinModal, useAppSecurity } from './PinGate';
@@ -280,7 +281,7 @@ export default function App() {
   } = useAppSecurity();
 
   const { categories: apiCategories, menuItems: apiItems, fetchMenu, isLoading: isMenuLoading } = useMenuStore();
-  const { ingredients, deductIngredients, syncStock } = useInventoryStore();
+  const { ingredients, deductIngredients, syncStock, fetchInventory } = useInventoryStore();
   const lowStockCount = ingredients.filter(i => i.stock <= i.minStock).length;
 
   // ── Online / Socket / Sync Initialization ──
@@ -312,6 +313,9 @@ export default function App() {
 
     // 4. Fetch Menu from Backend
     fetchMenu();
+
+    // 5. Fetch Inventory from Backend
+    fetchInventory();
 
     return () => {
       window.removeEventListener('online', up);
@@ -351,15 +355,15 @@ export default function App() {
     // 2. Persist to IndexedDB sync queue (Reliable persistence)
     await localDB.savePendingOrder({ id: orderId, payload });
 
-    // 3. Deduct ingredients locally (Optimistic update)
-    deductIngredients(payload.items);
-
-    // 4. Print receipt locally
+    // 3. Print receipt locally
     if (withPrint) {
       await printReceipt({ cart, subTotal, gst, grandTotal, tableNumber, paymentMethod });
     }
 
-    // 5. Trigger immediate background sync
+    // 6. Deduct ingredients locally (Optimistic update)
+    deductIngredients(payload.items);
+
+    // 7. Trigger immediate background sync (This will also call the backend to create the order and deduct stock there)
     syncManager.sync();
 
     clearCart();

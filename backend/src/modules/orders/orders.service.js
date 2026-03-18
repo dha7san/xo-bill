@@ -1,6 +1,8 @@
 const orderRepo   = require('./orders.repository');
 const eventBus    = require('../../shared/events/eventBus');
 const { CHANNELS } = require('../../shared/events/eventBus');
+const inventoryService = require('../inventory/inventory.service');
+
 
 class OrderService {
   async createOrder(dto, { io } = {}) {
@@ -29,6 +31,20 @@ class OrderService {
       syncedFrom: dto.syncedFrom ?? 'online',
       createdAt:  timestamp ? new Date(timestamp) : undefined,
     });
+
+    // Deduce Inventory (Automatically lookup recipes)
+    const stockUpdates = await inventoryService.deductByOrder(items).catch(err => {
+      console.error('Inventory deduction failed:', err.message);
+      return [];
+    });
+
+    // Broadcast stock updates via Socket.io so terminals update live
+    if (io && stockUpdates.length > 0) {
+      stockUpdates.forEach(({ skuCode, newStock }) => {
+        io.to(`store:${order.storeId}`).emit('inventory.updated', { ingredientId: skuCode, newStock });
+      });
+    }
+
 
     // Publish to event bus (non-blocking)
     eventBus.publish(CHANNELS.ORDER_CREATED, order.toObject()).catch(() => {});
