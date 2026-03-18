@@ -108,16 +108,72 @@ function PaymentBar({ label, amount, total, Icon, color }) {
   );
 }
 
+// ─── Helper: build daily trend buckets ──────────────────────────────────────
+function buildTrend(orders, range) {
+  const days = range === 'week' ? 7 : 30;
+  const labels = [];
+  const totals = [];
+  
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dStr = d.toISOString().slice(0, 10);
+    labels.push(d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
+    
+    const dayTotal = orders
+      .filter(o => o.timestamp.startsWith(dStr))
+      .reduce((s, o) => s + o.totalAmount, 0);
+    totals.push(dayTotal);
+  }
+  return { labels, totals };
+}
+
+function TrendChart({ data }) {
+  const max = Math.max(...data.totals, 1);
+  return (
+    <div className="flex items-end gap-1 h-32 w-full pt-6">
+      {data.totals.map((val, idx) => {
+        const pct = (val / max) * 100;
+        return (
+          <div key={idx} className="group relative flex-1 flex flex-col items-center justify-end h-full">
+            <div 
+              className="w-full rounded-t-md bg-emerald-500/40 group-hover:bg-emerald-400 transition-all border-t border-emerald-500/20"
+              style={{ height: `${Math.max(pct, val > 0 ? 5 : 0)}%` }}
+            />
+            {val > 0 && (
+              <div className="absolute bottom-full mb-1 hidden group-hover:flex flex-col items-center z-10 pointer-events-none">
+                <div className="bg-neutral-800 text-white text-[10px] px-2 py-1 rounded-md whitespace-nowrap border border-neutral-700 font-bold">
+                  {data.labels[idx]} — {fmt(val)}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ─── Main Report Modal ─────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 export default function ReportModal({ completedOrders, onClose }) {
-  const [tab, setTab] = useState('today'); // 'today' | 'all'
+  const [tab, setTab] = useState('today'); // 'today' | 'week' | 'month' | 'all'
 
   const orders = useMemo(() => {
+    const now = new Date();
     if (tab === 'today') {
       const today = todayStr();
       return completedOrders.filter(o => o.timestamp.startsWith(today));
+    }
+    if (tab === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return completedOrders.filter(o => new Date(o.timestamp) >= weekAgo);
+    }
+    if (tab === 'month') {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return completedOrders.filter(o => new Date(o.timestamp) >= monthAgo);
     }
     return completedOrders;
   }, [completedOrders, tab]);
@@ -152,10 +208,12 @@ export default function ReportModal({ completedOrders, onClose }) {
     });
 
     const hourly = buildHourly(orders);
-    return { totalRevenue, orderCount, avgOrder, topItems, payBreakdown, hourly };
-  }, [orders]);
+    const trend  = (tab === 'week' || tab === 'month') ? buildTrend(orders, tab) : null;
 
-  const tabLabel = tab === 'today' ? 'Today' : 'All Time';
+    return { totalRevenue, orderCount, avgOrder, topItems, payBreakdown, hourly, trend };
+  }, [orders, tab]);
+
+  const tabLabel = tab === 'today' ? 'Today' : (tab === 'week' ? 'Past 7 Days' : (tab === 'month' ? 'Past 30 Days' : 'All Time'));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
@@ -180,17 +238,17 @@ export default function ReportModal({ completedOrders, onClose }) {
           <div className="flex items-center gap-3">
             {/* Tab selector */}
             <div className="flex bg-neutral-900 border border-neutral-800 rounded-xl p-1 gap-1">
-              {['today', 'all'].map(t => (
+              {['today', 'week', 'month', 'all'].map(t => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
                     tab === t
                       ? 'bg-sky-500 text-white shadow-[0_0_12px_rgba(14,165,233,0.3)]'
-                      : 'text-neutral-400 hover:text-white'
+                      : 'text-neutral-500 hover:text-white'
                   }`}
                 >
-                  {t === 'today' ? 'Today' : 'All Time'}
+                  {t}
                 </button>
               ))}
             </div>
@@ -239,6 +297,25 @@ export default function ReportModal({ completedOrders, onClose }) {
               <div className="flex justify-between text-neutral-600 text-xs mt-2 px-0.5">
                 <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span>
               </div>
+            </div>
+          )}
+
+          {/* ── Daily Trend Chart (week/month) ── */}
+          {(tab === 'week' || tab === 'month') && stats.trend && (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 animate-[fadeIn_0.3s_ease]">
+               <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp size={16} className="text-emerald-400" />
+                    <h3 className="text-white font-semibold text-sm">Daily Revenue Trend</h3>
+                  </div>
+                  <span className="text-[10px] font-black text-neutral-500 uppercase">{tab === 'week' ? 'Last 7 Days' : 'Last 30 Days'}</span>
+               </div>
+               <TrendChart data={stats.trend} />
+               <div className="flex justify-between text-neutral-600 text-[10px] uppercase font-bold mt-3 px-1">
+                  <span>{stats.trend.labels[0]}</span>
+                  <span>{stats.trend.labels[Math.floor(stats.trend.labels.length / 2)]}</span>
+                  <span>{stats.trend.labels[stats.trend.labels.length - 1]}</span>
+               </div>
             </div>
           )}
 
